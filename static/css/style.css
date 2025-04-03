@@ -1,0 +1,170 @@
+body {
+    font-family: sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #1a1a1a;
+    margin-bottom: 30px;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.card h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    font-size: 1.2em;
+    color: #007bff; /* Example primary color */
+}
+
+.full-width {
+    grid-column: 1 / -1; /* Make event log span full width */
+}
+
+/* Gauges */
+.gauges {
+    text-align: center;
+}
+.gauge-container {
+    display: inline-block; /* Or use flexbox */
+    width: 45%;
+    margin-bottom: 10px;
+}
+.gauge {
+   width: 100%;
+   max-width: 150px; /* Adjust size */
+   height: auto;
+}
+.gauge-label {
+    font-size: 0.9em;
+    color: #666;
+    margin-top: -10px; /* Adjust positioning */
+}
+.gear-display {
+    font-size: 1.8em;
+    font-weight: bold;
+    margin-top: 10px;
+}
+.gear-display #gear {
+    display: inline-block;
+    min-width: 30px; /* Ensure space for gear number */
+    text-align: center;
+}
+
+
+/* Input Bars */
+.bar-container {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+}
+.bar-container label {
+    width: 70px; /* Adjust as needed */
+    font-size: 0.9em;
+}
+.bar-container progress {
+    flex-grow: 1;
+    height: 20px;
+    margin: 0 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    overflow: hidden; /* Ensure smooth corners */
+}
+/* Styling progress bars */
+progress::-webkit-progress-bar { background-color: #e0e0e0; border-radius: 4px; }
+progress::-webkit-progress-value { background-color: #007bff; border-radius: 4px; transition: width 0.1s ease-out; }
+progress::-moz-progress-bar { background-color: #007bff; border-radius: 4px; transition: width 0.1s ease-out; }
+
+.bar-container span {
+    font-size: 0.9em;
+    min-width: 35px; /* Ensure space for percentage */
+    text-align: right;
+}
+
+/* Tyres */
+.tyre-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 15px; /* Row gap, Column gap */
+    font-size: 0.9em;
+}
+
+/* ERS/DRS Status */
+.status-indicator span {
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: white;
+}
+.status-off { background-color: #dc3545; } /* Red for off */
+.status-on { background-color: #28a745; } /* Green for on */
+.status-available { background-color: #ffc107; color: #333; } /* Yellow for available */
+
+/* Damage */
+.damage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 5px 10px;
+    font-size: 0.9em;
+}
+.damage-grid span { font-weight: bold; }
+/* Add color coding for damage levels later */
+.damage-value-low { color: green; }
+.damage-value-medium { color: orange; }
+.damage-value-high { color: red; }
+
+
+/* Event Log */
+.event-log ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    height: 150px; /* Fixed height */
+    overflow-y: scroll; /* Enable scrolling */
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+.event-log li {
+    padding: 5px 10px;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 0.9em;
+}
+.event-log li:last-child {
+    border-bottom: none;
+}
+.event-log .event-time {
+    color: #888;
+    margin-right: 8px;
+    font-size: 0.8em;
+}
+.event-lap { background-color: #e7f3ff; }
+.event-alert { background-color: #fff3cd; font-weight: bold;}
+.event-damage { background-color: #f8d7da; color: #721c24;}
+.event-info { background-color: #d4edda; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .grid-container {
+        grid-template-columns: 1fr; /* Stack cards on smaller screens */
+    }
+    .gauge-container {
+        width: 48%;
+    }
+}
