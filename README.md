@@ -10,6 +10,7 @@ A real-time Formula 1 telemetry dashboard that captures and displays live data f
 - Damage reporting
 - Lap timing and position tracking
 - Event notifications (completed laps, flags, etc.)
+- **Automatic track detection** from F1 game data
 - **AI Race Engineer** that provides contextual coaching via Salesforce AI Models API
 
 ## Requirements
@@ -25,25 +26,58 @@ A real-time Formula 1 telemetry dashboard that captures and displays live data f
 Run both the dashboard server and telemetry receiver with a single command:
 
 ```bash
-python3 run_dashboard.py --driver "Jacob Berry" --track "Japan"
+python3 run_dashboard.py --driver "Jacob Berry" --datacloud
 ```
 
-Your web browser will automatically open with the dashboard, and the system will be ready to receive telemetry from the F1 game.
+Your web browser will automatically open with the dashboard, and the system will be ready to receive telemetry from the F1 game. The track name will be automatically detected from the game data.
+
+### Salesforce Data Cloud Integration
+
+To stream telemetry data to Salesforce Data Cloud:
+
+1. **Setup environment**: Copy `.env.example` to `.env` and configure your Salesforce credentials
+2. **Generate RSA keys**: Run the key generation script or use existing keys
+3. **Configure Connected App**: Upload certificate and configure JWT Bearer Flow
+4. **Run with Data Cloud**: Use the `--datacloud` flag
+
+```bash
+python3 run_dashboard.py --driver "Your Name" --datacloud
+```
 
 ### Command-line Options
 
 ```
-usage: run_dashboard.py [-h] [--driver DRIVER] [--track TRACK] [--port PORT] [--no-browser] [--debug]
+usage: run_dashboard.py [-h] [--driver DRIVER] [--track TRACK] [--no-auto-track] [--port PORT] [--no-browser] [--debug]
 
 Start F1 Dashboard components with a single command
 
 options:
   -h, --help         show this help message and exit
   --driver DRIVER    Driver name to display on dashboard
-  --track TRACK      Track name to display on dashboard
-  --port PORT        Port for the web server (default: 5000)
+  --track TRACK      Track name to display on dashboard (will be auto-detected from game data)
+  --no-auto-track    Disable automatic track detection from game data
+  --port PORT        Port for the web server (default: 8080)
   --no-browser       Don't automatically open web browser
   --debug            Enable debug mode for more verbose logging
+```
+
+## Track Auto-Detection
+
+The dashboard automatically detects the current track from the F1 game's telemetry data. This eliminates the need to manually specify the track name when starting the dashboard.
+
+**Supported tracks** (from F1 24 UDP specification):
+- Melbourne, Paul Ricard, Shanghai, Sakhir (Bahrain), Catalunya
+- Monaco, Montreal, Silverstone, Hockenheim, Hungaroring
+- Spa, Monza, Singapore, Suzuka, Abu Dhabi
+- Texas, Brazil, Austria, Sochi, Mexico
+- Baku (Azerbaijan), Zandvoort, Imola, Portimão
+- Jeddah, Miami, Las Vegas, Losail
+- And short variants of various tracks
+
+If auto-detection fails or you prefer to set a fixed track name, use the `--no-auto-track` flag:
+
+```bash
+python3 run_dashboard.py --driver "Your Name" --track "Silverstone" --no-auto-track
 ```
 
 ## F1 Game Settings
@@ -96,6 +130,32 @@ The dashboard includes an AI race engineer that provides contextual coaching usi
    ```
 
 2. Configure your Salesforce Connected App and Models API credentials:
+
+### Data Cloud Integration Setup
+
+If you want to stream F1 telemetry data to Salesforce Data Cloud:
+
+1. **Generate RSA Key Pair for JWT Authentication:**
+   ```bash
+   python3 generate_keys.py
+   ```
+   This creates `private.key` and `public.key` files.
+
+2. **Configure Connected App for Data Cloud:**
+   - In Salesforce Setup → Apps → App Manager → Edit your Connected App
+   - Check "Use digital signatures"
+   - Upload the `public.key` file or paste its contents
+   - Ensure OAuth scopes include "Access Data Cloud APIs (cdp_api)"
+   - Save the Connected App
+
+3. **Update your `.env` file:**
+   ```
+   # Data Cloud Integration
+   DATACLOUD_ENABLED=true
+   SALESFORCE_DOMAIN=your-org.my.salesforce.com
+   SF_PRIVATE_KEY_PATH=./private.key
+   SF_USERNAME=your-salesforce-username@domain.com
+   ```
 
 #### Salesforce Models API Setup
 

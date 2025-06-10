@@ -43,6 +43,14 @@ venv.bak/
 # Claude
 **/.claude/settings.local.json
 
+# Salesforce & Security
+*.key
+*.crt
+*.pem
+.env
+.env.local
+.env.production
+
 # Misc
 *.log
 .cache/

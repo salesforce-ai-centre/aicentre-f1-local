@@ -11,8 +11,11 @@ import concurrent.futures
 import sys
 import argparse
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
+from dotenv import load_dotenv
+from datacloud_integration import create_datacloud_client
 
 # --- Constants ---
 APP_NAME = "F1 24 Telemetry Bridge"
@@ -519,6 +522,41 @@ class PacketCarDamage:
                 continue
         return packet
 
+# --- Session Packet Structure (F1 24 Spec) ---
+@dataclass
+class PacketSessionData:
+    m_header: PacketHeader
+    m_weather: int = 0                      # uint8
+    m_trackTemperature: int = 0             # int8
+    m_airTemperature: int = 0               # int8
+    m_totalLaps: int = 0                    # uint8
+    m_trackLength: int = 0                  # uint16
+    m_sessionType: int = 0                  # uint8
+    m_trackId: int = -1                     # int8 (-1 for unknown)
+    # Note: We only parse the fields we need for track detection
+    
+    @classmethod
+    def from_bytes(cls, header: PacketHeader, data: bytes) -> Optional['PacketSessionData']:
+        if len(data) < 8:  # Minimum bytes needed for trackId
+            return None
+        try:
+            # Parse only the fields we need (up to trackId at offset 7)
+            session_format = "<BbbBHBb"  # weather, trackTemp, airTemp, totalLaps, trackLength, sessionType, trackId
+            unpacked = struct.unpack(session_format, data[:8])
+            return cls(
+                m_header=header,
+                m_weather=unpacked[0],
+                m_trackTemperature=unpacked[1],
+                m_airTemperature=unpacked[2],
+                m_totalLaps=unpacked[3],
+                m_trackLength=unpacked[4],
+                m_sessionType=unpacked[5],
+                m_trackId=unpacked[6]
+            )
+        except struct.error as e:
+            logging.error(f"Failed to unpack PacketSessionData: {e}")
+            return None
+
 
 # --- Tyre Compound Mapping (Example - Check F1 24 Spec Appendix) ---
 # Based on F1 24 Spec Page 11 for m_actualTyreCompound
@@ -548,6 +586,18 @@ ERS_DEPLOY_MODE_MAP = {
 }
 DEFAULT_ERS_MODE = "N/A"
 
+# Track ID Mapping (F1 24 Spec Appendix)
+TRACK_ID_MAP = {
+    0: "Melbourne", 1: "Paul Ricard", 2: "Shanghai", 3: "Sakhir (Bahrain)", 4: "Catalunya",
+    5: "Monaco", 6: "Montreal", 7: "Silverstone", 8: "Hockenheim", 9: "Hungaroring",
+    10: "Spa", 11: "Monza", 12: "Singapore", 13: "Suzuka", 14: "Abu Dhabi",
+    15: "Texas", 16: "Brazil", 17: "Austria", 18: "Sochi", 19: "Mexico",
+    20: "Baku (Azerbaijan)", 21: "Sakhir Short", 22: "Silverstone Short", 23: "Texas Short",
+    24: "Suzuka Short", 25: "Hanoi", 26: "Zandvoort", 27: "Imola", 28: "Portimão",
+    29: "Jeddah", 30: "Miami", 31: "Las Vegas", 32: "Losail"
+}
+DEFAULT_TRACK_NAME = "Unknown Track"
+
 
 # --- Telemetry Bridge Class ---
 class TelemetryBridge:
@@ -556,9 +606,12 @@ class TelemetryBridge:
     # Number of cars to track (same as in the packet classes)
     NUM_CARS = 22
 
-    def __init__(self, driver: str, track: str, url: str, ip: str, port: int, debug: bool):
+    def __init__(self, driver: str, track: str, url: str, ip: str, port: int, debug: bool, auto_detect_track: bool = True, datacloud: bool = False):
         self.driver_name: str = driver
         self.track_name: str = track
+        self.original_track_name: str = track  # Store original for fallback
+        self.auto_detect_track: bool = auto_detect_track
+        self.datacloud_enabled: bool = datacloud
         self.api_url: str = url
         self.udp_ip: str = ip
         self.udp_port: int = port
@@ -579,6 +632,7 @@ class TelemetryBridge:
         self.latest_car_status: Optional[CarStatusData] = None
         self.latest_car_damage: Optional[CarDamageData] = None # Added state for damage
         self.latest_event: Optional[Dict[str, Any]] = None  # Store the latest event
+        self.latest_header: Optional[PacketHeader] = None  # Store latest packet header for frame ID
 
         self.current_lap_num: int = 0
         self.lap_just_completed: bool = False
@@ -587,6 +641,32 @@ class TelemetryBridge:
         # Aggregation State
         self.aggregated_data: Dict[str, Dict[str, Any]] = self._init_aggregation()
         self.lap_start_time: Optional[float] = None
+        
+        # Data Cloud Integration
+        self.datacloud_client = None
+        if self.datacloud_enabled:
+            try:
+                load_dotenv()
+                sf_client_id = os.environ.get("SF_CLIENT_ID", "")
+                sf_private_key_path = os.environ.get("SF_PRIVATE_KEY_PATH", "")
+                sf_username = os.environ.get("SF_USERNAME", "")
+                salesforce_domain = os.environ.get("SALESFORCE_DOMAIN", "")
+                
+                if sf_client_id and sf_private_key_path and sf_username and salesforce_domain:
+                    self.datacloud_client = create_datacloud_client(
+                        salesforce_domain=salesforce_domain,
+                        client_id=sf_client_id,
+                        private_key_path=sf_private_key_path,
+                        username=sf_username,
+                        debug=self.debug_mode
+                    )
+                    print("✅ Data Cloud client initialized successfully")
+                else:
+                    print("❌ Data Cloud integration enabled but missing configuration in .env file")
+                    self.datacloud_enabled = False
+            except Exception as e:
+                print(f"❌ Failed to initialize Data Cloud client: {e}")
+                self.datacloud_enabled = False
 
         # Connection State
         self.connection_stats: Dict[str, float] = {"total_sent": 0, "total_failed": 0, "total_response_time": 0}
@@ -595,7 +675,10 @@ class TelemetryBridge:
 
         self._setup_logging()
         logging.info(f"Initializing {APP_NAME}")
-        logging.info(f"Driver: {self.driver_name}, Track: {self.track_name}, Session: {self.session_id}")
+        if self.auto_detect_track:
+            logging.info(f"Driver: {self.driver_name}, Track: {self.track_name} (auto-detection enabled), Session: {self.session_id}")
+        else:
+            logging.info(f"Driver: {self.driver_name}, Track: {self.track_name} (fixed), Session: {self.session_id}")
         logging.info(f"API Endpoint: {self.api_url}")
         logging.info(f"Listening on UDP {self.udp_ip}:{self.udp_port}")
 
@@ -949,28 +1032,53 @@ class TelemetryBridge:
                           f"TyreWear(FL:{dmg.m_tyresWear[2]:.1f} FR:{dmg.m_tyresWear[3]:.1f} RL:{dmg.m_tyresWear[0]:.1f} RR:{dmg.m_tyresWear[1]:.1f})% "
                           f"Eng:{dmg.m_engineDamage}% Gearbox:{dmg.m_gearBoxDamage}% DRSFault:{dmg.m_drsFault}")
 
+    def _handle_session(self, packet: PacketSessionData):
+        """Handles incoming Session packet for track detection."""
+        if not packet:
+            return
+        
+        # Auto-detect track name from session data
+        if self.auto_detect_track and packet.m_trackId != -1:
+            detected_track = TRACK_ID_MAP.get(packet.m_trackId, DEFAULT_TRACK_NAME)
+            if detected_track != DEFAULT_TRACK_NAME and detected_track != self.track_name:
+                old_track = self.track_name
+                self.track_name = detected_track
+                logging.info(f"🏁 Track auto-detected: {detected_track} (was: {old_track})")
+        
+        if self.debug_mode and self.packets_received % 100 == 0:
+            logging.debug(f"SESSION: Track ID={packet.m_trackId}, Track={self.track_name}, "
+                         f"Weather={packet.m_weather}, TrackTemp={packet.m_trackTemperature}°C, "
+                         f"TotalLaps={packet.m_totalLaps}")
+
 
     # --- Network and Sending ---
 
-    def _prepare_payload(self) -> Optional[Dict[str, Any]]:
+    def _prepare_payload(self, header: Optional[PacketHeader] = None) -> Optional[Dict[str, Any]]:
         """Constructs the JSON payload to send to the API."""
-        # Don't require any data - send what we have for local operation
-        # This ensures dashboard always gets some data even in Time Trial or other modes
-        if not self.latest_telemetry and not self.latest_lap_data:
-            logging.debug("Sending minimal payload - no telemetry or lap data available yet.")
-            # Return a minimal payload that keeps the dashboard alive
-            return {
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                "sessionId": self.session_id,
-                "driverName": self.driver_name,
-                "track": self.track_name,
-                "connectionStatus": "waiting_for_data"
-            }
+        # Always send a payload with whatever data we have - don't require complete data
+        # This ensures dashboard gets updates even when some packet types are missing
 
         # Calculate stats just before sending
         lap_stats = self._calculate_lap_stats()
 
         now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+        
+        # Send minimal payload if no data available yet
+        if not self.latest_telemetry and not self.latest_lap_data:
+            logging.debug(f"Sending minimal payload - no telemetry or lap data available yet. "
+                         f"latest_telemetry={self.latest_telemetry is not None}, "
+                         f"latest_lap_data={self.latest_lap_data is not None}, "
+                         f"player_car_index={self.player_car_index}")
+            return {
+                "timestamp": now_iso,
+                "sessionId": self.session_id,
+                "driverName": self.driver_name,
+                "track": self.track_name,
+                "connectionStatus": "waiting_for_data"
+            }
+        
+        logging.debug(f"Preparing full payload with telemetry={self.latest_telemetry is not None}, "
+                     f"lap_data={self.latest_lap_data is not None}")
         is_lap_complete = self.lap_just_completed
         final_lap_time_sec = (self.last_lap_time_ms / 1000.0) if is_lap_complete and self.last_lap_time_ms > 0 else None
 
@@ -1000,8 +1108,13 @@ class TelemetryBridge:
             "rearRight": current_telemetry.m_brakesTemperature[1] if len(current_telemetry.m_brakesTemperature) > 1 else None,
         }
 
+        # Generate primary keys for Data Cloud
+        frame_id = header.m_frameIdentifier if header else int(time.time()*1000)
+        telemetry_id = f"{self.session_id}-{frame_id}-{int(time.time()*1000)}"
+        
         # Construct the main payload dictionary with all essential data
         payload = {
+            "telemetryId": telemetry_id,  # Primary key for Data Cloud
             "timestamp": now_iso,
             "sessionId": self.session_id,
             "driverName": self.driver_name,
@@ -1111,9 +1224,9 @@ class TelemetryBridge:
         
         return payload
 
-    def _send_payload(self):
+    def _send_payload(self, header: Optional[PacketHeader] = None):
         """Prepares and sends the telemetry payload to the API endpoint."""
-        payload = self._prepare_payload()
+        payload = self._prepare_payload(header)
         if not payload:
             return
 
@@ -1160,6 +1273,15 @@ class TelemetryBridge:
 
                 self.send_retries = 0 # Reset retries on success
                 self.current_send_interval = DEFAULT_SEND_INTERVAL_S # Reset interval
+
+                # Send to Data Cloud if enabled
+                if self.datacloud_enabled and self.datacloud_client:
+                    try:
+                        self.datacloud_client.send_telemetry_record(payload)
+                        if self.debug_mode:
+                            logging.debug("✅ Data Cloud telemetry sent successfully")
+                    except Exception as e:
+                        logging.error(f"❌ Failed to send telemetry to Data Cloud: {e}")
 
                 # Reset aggregation ONLY after successful send of a completed lap payload
                 if self.lap_just_completed:
@@ -1374,6 +1496,8 @@ class TelemetryBridge:
 
                     # Only process packets if we know the player index (and it's valid)
                     if 0 <= self.player_car_index < self.NUM_CARS: # Check index validity
+                        # Store the latest header for frame ID
+                        self.latest_header = header
                         packet_data = received_data[PacketHeader.SIZE:]
                         packet_processed = False # Flag to check if any handler processed it
 
@@ -1419,17 +1543,20 @@ class TelemetryBridge:
                             self._handle_event(header, packet_data)
                             packet_processed = True # Event handler doesn't return parsed packet
 
-                        # Add elif for other packets as needed (Motion, Session, Participants etc.)
-                        # elif header.m_packetId == PACKET_ID_SESSION:
-                        #     # Placeholder: Parse session packet if needed later
-                        #     packet_processed = True # Mark as handled even if ignored for now
+                        elif header.m_packetId == PACKET_ID_SESSION:
+                            packet = PacketSessionData.from_bytes(header, packet_data)
+                            if packet:
+                                self._handle_session(packet)
+                                packet_processed = True
+                            else:
+                                logging.warning(f"Failed to parse PacketSessionData (Header: {header})")
 
                         # --- End Packet Handlers ---
 
                         # Log if a packet ID was received but not handled by any 'if/elif' block above
                         # Filter out common noisy packets if they are not needed
                         ignored_packet_ids = {
-                            PACKET_ID_MOTION, PACKET_ID_SESSION, PACKET_ID_PARTICIPANTS,
+                            PACKET_ID_MOTION, PACKET_ID_PARTICIPANTS,
                             PACKET_ID_CAR_SETUPS, PACKET_ID_FINAL_CLASSIFICATION, PACKET_ID_LOBBY_INFO,
                             PACKET_ID_SESSION_HISTORY, PACKET_ID_TYRE_SETS, PACKET_ID_MOTION_EX,
                             PACKET_ID_TIME_TRIAL
@@ -1456,7 +1583,7 @@ class TelemetryBridge:
                     # Skip send_interval adjustment for local operation to maximize throughput
                     # Always send a payload, even if no data is available yet
                     # This keeps the dashboard alive and responsive
-                    self.executor.submit(self._send_payload)
+                    self.executor.submit(self._send_payload, self.latest_header)
                     self.last_send_time = now # Update last send time *after* submitting
 
                 # 4. Periodic Status Update
@@ -1502,11 +1629,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=APP_NAME)
     parser.add_argument('--debug', action='store_true', help='Enable detailed debug logging')
     parser.add_argument('--driver', type=str, default=DEFAULT_DRIVER_NAME, help='Driver name for API payload')
-    parser.add_argument('--track', type=str, default=DEFAULT_TRACK_NAME, help='Track name for API payload')
+    parser.add_argument('--track', type=str, default=DEFAULT_TRACK_NAME, help='Track name for API payload (used as fallback if auto-detection fails)')
+    parser.add_argument('--no-auto-track', action='store_true', help='Disable automatic track detection from game data')
     parser.add_argument('--url', type=str, required=True, help='Full URL of the telemetry API endpoint')
     parser.add_argument('--ip', type=str, default=DEFAULT_UDP_IP, help=f'IP address to bind UDP socket to (default: {DEFAULT_UDP_IP})')
     parser.add_argument('--port', type=int, default=DEFAULT_UDP_PORT, help=f'UDP port to listen on (default: {DEFAULT_UDP_PORT})')
     parser.add_argument('--server-port', type=int, default=8080, help='Port for the web server to send data to (default: 8080)')
+    parser.add_argument('--datacloud', action='store_true', help='Enable Salesforce Data Cloud integration')
     args = parser.parse_args()
 
     # Basic validation and URL adjustment for server port
@@ -1528,7 +1657,9 @@ if __name__ == "__main__":
             url=args.url,
             ip=args.ip,
             port=args.port,
-            debug=args.debug
+            debug=args.debug,
+            auto_detect_track=not args.no_auto_track,
+            datacloud=args.datacloud
         )
         bridge.run() # Start the main loop
     except Exception as e:

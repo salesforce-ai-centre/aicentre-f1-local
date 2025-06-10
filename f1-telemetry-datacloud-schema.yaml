@@ -1,0 +1,357 @@
+openapi: 3.0.3
+components:
+  schemas:
+    TelemetryRecord:
+      type: object
+      properties:
+        telemetry_id:
+          type: string
+          description: "Primary key: session_id-frame_id-timestamp"
+        session_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        driver_name:
+          type: string
+        track_name:
+          type: string
+        frame_id:
+          type: number
+        player_car_index:
+          type: number
+        session_time:
+          type: number
+        last_lap_time_ms:
+          type: number
+        current_lap_time_ms:
+          type: number
+        lap_number:
+          type: number
+        position:
+          type: number
+        sector:
+          type: number
+        sector1_time_ms:
+          type: number
+        sector2_time_ms:
+          type: number
+        sector3_time_ms:
+          type: number
+        lap_distance:
+          type: number
+        total_distance:
+          type: number
+        grid_position:
+          type: number
+        pit_status:
+          type: number
+        num_pit_stops:
+          type: number
+        lap_valid:
+          type: boolean
+        penalties:
+          type: number
+        warnings:
+          type: number
+        driver_status:
+          type: string
+        result_status:
+          type: string
+        speed_trap_fastest:
+          type: number
+        speed:
+          type: number
+        throttle:
+          type: number
+        brake:
+          type: number
+        steer:
+          type: number
+        clutch:
+          type: number
+        gear:
+          type: number
+        engine_rpm:
+          type: number
+        drs_active:
+          type: boolean
+        rev_lights_percent:
+          type: number
+        engine_temperature:
+          type: number
+        brake_temp_rear_left:
+          type: number
+        brake_temp_rear_right:
+          type: number
+        brake_temp_front_left:
+          type: number
+        brake_temp_front_right:
+          type: number
+        tyre_surf_temp_rear_left:
+          type: number
+        tyre_surf_temp_rear_right:
+          type: number
+        tyre_surf_temp_front_left:
+          type: number
+        tyre_surf_temp_front_right:
+          type: number
+        tyre_inner_temp_rear_left:
+          type: number
+        tyre_inner_temp_rear_right:
+          type: number
+        tyre_inner_temp_front_left:
+          type: number
+        tyre_inner_temp_front_right:
+          type: number
+        tyre_pressure_rear_left:
+          type: number
+        tyre_pressure_rear_right:
+          type: number
+        tyre_pressure_front_left:
+          type: number
+        tyre_pressure_front_right:
+          type: number
+        surface_type_rear_left:
+          type: string
+        surface_type_rear_right:
+          type: string
+        surface_type_front_left:
+          type: string
+        surface_type_front_right:
+          type: string
+        traction_control:
+          type: number
+        anti_lock_brakes:
+          type: boolean
+        fuel_mix:
+          type: string
+        front_brake_bias:
+          type: number
+        pit_limiter_active:
+          type: boolean
+        fuel_in_tank:
+          type: number
+        fuel_capacity:
+          type: number
+        fuel_remaining_laps:
+          type: number
+        max_rpm:
+          type: number
+        idle_rpm:
+          type: number
+        max_gears:
+          type: number
+        drs_allowed:
+          type: boolean
+        drs_activation_distance:
+          type: number
+        actual_tyre_compound:
+          type: string
+        visual_tyre_compound:
+          type: string
+        tyre_age:
+          type: number
+        vehicle_fia_flags:
+          type: string
+        engine_power_ice:
+          type: number
+        engine_power_mguk:
+          type: number
+        ers_store_energy:
+          type: number
+        ers_deploy_mode:
+          type: string
+        ers_harvested_mguk:
+          type: number
+        ers_harvested_mguh:
+          type: number
+        ers_deployed_this_lap:
+          type: number
+        tyre_wear_rear_left:
+          type: number
+        tyre_wear_rear_right:
+          type: number
+        tyre_wear_front_left:
+          type: number
+        tyre_wear_front_right:
+          type: number
+        tyre_damage_rear_left:
+          type: number
+        tyre_damage_rear_right:
+          type: number
+        tyre_damage_front_left:
+          type: number
+        tyre_damage_front_right:
+          type: number
+        brakes_damage_rear_left:
+          type: number
+        brakes_damage_rear_right:
+          type: number
+        brakes_damage_front_left:
+          type: number
+        brakes_damage_front_right:
+          type: number
+        front_left_wing_damage:
+          type: number
+        front_right_wing_damage:
+          type: number
+        rear_wing_damage:
+          type: number
+        floor_damage:
+          type: number
+        diffuser_damage:
+          type: number
+        sidepod_damage:
+          type: number
+        gearbox_damage:
+          type: number
+        engine_damage:
+          type: number
+        drs_fault:
+          type: boolean
+        ers_fault:
+          type: boolean
+        engine_wear_mguh:
+          type: number
+        engine_wear_es:
+          type: number
+        engine_wear_ce:
+          type: number
+        engine_wear_ice:
+          type: number
+        engine_wear_mguk:
+          type: number
+        engine_wear_tc:
+          type: number
+
+    SessionInfo:
+      type: object
+      properties:
+        session_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        session_type:
+          type: string
+        track_id:
+          type: number
+        track_name:
+          type: string
+        formula:
+          type: string
+        total_laps:
+          type: number
+        track_length:
+          type: number
+        session_time_left:
+          type: number
+        session_duration:
+          type: number
+        pit_speed_limit:
+          type: number
+        weather:
+          type: string
+        track_temperature:
+          type: number
+        air_temperature:
+          type: number
+        safety_car_status:
+          type: string
+        game_mode:
+          type: string
+        
+    RaceEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+          description: "Primary key: session_id-event_type-timestamp"
+        timestamp:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+        event_type:
+          type: string
+        description:
+          type: string
+        vehicle_index:
+          type: number
+        secondary_vehicle_index:
+          type: number
+        event_time:
+          type: string
+          format: date-time
+        lap_number:
+          type: number
+        driver_name:
+          type: string
+        
+    ParticipantInfo:
+      type: object
+      properties:
+        participant_id:
+          type: string
+          description: "Primary key: session_id-car_index"
+        timestamp:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+        car_index:
+          type: number
+        driver_id:
+          type: number
+        team_id:
+          type: number
+        race_number:
+          type: number
+        nationality:
+          type: string
+        name:
+          type: string
+        ai_controlled:
+          type: boolean
+        platform:
+          type: string
+        
+    MotionData:
+      type: object
+      properties:
+        motion_id:
+          type: string
+          description: "Primary key: session_id-car_index-timestamp"
+        timestamp:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+        car_index:
+          type: number
+        world_position_x:
+          type: number
+        world_position_y:
+          type: number
+        world_position_z:
+          type: number
+        world_velocity_x:
+          type: number
+        world_velocity_y:
+          type: number
+        world_velocity_z:
+          type: number
+        g_force_lateral:
+          type: number
+        g_force_longitudinal:
+          type: number
+        g_force_vertical:
+          type: number
+        yaw:
+          type: number
+        pitch:
+          type: number
+        roll:
+          type: number
+        
