@@ -12,6 +12,7 @@ import threading
 import time
 import webbrowser
 import socket
+import requests
 
 def start_flask_server(debug=False):
     """Start the Flask web server that hosts the dashboard."""
@@ -123,9 +124,26 @@ def kill_processes_on_port(port):
     except:
         pass
 
+def is_dashboard_accessible(url, timeout=5):
+    """Check if the dashboard is accessible by making a simple HTTP request."""
+    try:
+        response = requests.get(url, timeout=timeout)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
 def open_browser(url, delay=2):
-    """Open the dashboard in a web browser after a short delay."""
+    """Open the dashboard in a web browser after a short delay, checking if it's already accessible."""
     time.sleep(delay)  # Give the server time to start
+    
+    # Check if dashboard is already accessible (possibly already running)
+    if is_dashboard_accessible(url):
+        print(f"Dashboard is accessible at: {url}")
+        print("If the dashboard is already open in your browser, you can refresh that tab instead.")
+        print("Opening browser tab anyway...")
+    else:
+        print(f"Dashboard starting up at: {url}")
+    
     print(f"Opening dashboard in web browser: {url}")
     webbrowser.open(url)
 

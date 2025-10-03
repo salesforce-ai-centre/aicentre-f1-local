@@ -1,6 +1,736 @@
 document.addEventListener('DOMContentLoaded', (event) => {
     console.log("Dashboard script loaded.");
     
+    // Performance optimization: Smart DOM updates with change detection
+    const domCache = {
+        lastValues: new Map(),
+        updateThrottle: new Map(),
+        
+        // Check if a value has changed before updating DOM
+        shouldUpdate(elementId, newValue, throttleMs = 0) {
+            const key = elementId;
+            const lastValue = this.lastValues.get(key);
+            
+            // Check if value actually changed
+            if (lastValue === newValue) {
+                return false;
+            }
+            
+            // Check throttling if specified
+            if (throttleMs > 0) {
+                const lastUpdate = this.updateThrottle.get(key) || 0;
+                const now = performance.now();
+                if (now - lastUpdate < throttleMs) {
+                    return false;
+                }
+                this.updateThrottle.set(key, now);
+            }
+            
+            this.lastValues.set(key, newValue);
+            return true;
+        },
+        
+        // Smart update with change detection
+        updateElement(element, newValue, formatter = null, throttleMs = 0) {
+            if (!element || !this.shouldUpdate(element.id || element.className, newValue, throttleMs)) {
+                return false;
+            }
+            
+            const displayValue = formatter ? formatter(newValue) : newValue;
+            if (element.textContent !== displayValue) {
+                element.textContent = displayValue;
+            }
+            return true;
+        },
+        
+        // Smart class update
+        updateClass(element, className, condition, throttleMs = 0) {
+            const key = `${element.id || element.className}_${className}`;
+            if (!this.shouldUpdate(key, condition, throttleMs)) {
+                return false;
+            }
+            
+            if (condition) {
+                element.classList.add(className);
+            } else {
+                element.classList.remove(className);
+            }
+            return true;
+        }
+    };
+    
+    // Chart update throttling
+    const chartThrottle = {
+        lastUpdate: 0,
+        interval: 50, // Update charts max every 50ms for more responsive charts
+        
+        shouldUpdate() {
+            const now = performance.now();
+            if (now - this.lastUpdate < this.interval) {
+                return false;
+            }
+            this.lastUpdate = now;
+            return true;
+        }
+    };
+    
+    // Resource cleanup manager for memory leak prevention
+    const resourceManager = {
+        intervals: new Set(),
+        timeouts: new Set(),
+        eventListeners: new Map(),
+        
+        // Track intervals
+        setInterval(callback, delay) {
+            const id = setInterval(callback, delay);
+            this.intervals.add(id);
+            return id;
+        },
+        
+        // Track timeouts
+        setTimeout(callback, delay) {
+            const id = setTimeout(() => {
+                callback();
+                this.timeouts.delete(id);
+            }, delay);
+            this.timeouts.add(id);
+            return id;
+        },
+        
+        // Track event listeners
+        addEventListener(element, event, handler, options) {
+            element.addEventListener(event, handler, options);
+            
+            const key = `${element.constructor.name}_${event}`;
+            if (!this.eventListeners.has(key)) {
+                this.eventListeners.set(key, []);
+            }
+            this.eventListeners.get(key).push({ element, event, handler });
+        },
+        
+        // Clean up all resources
+        cleanup() {
+            // Clear intervals
+            this.intervals.forEach(id => clearInterval(id));
+            this.intervals.clear();
+            
+            // Clear timeouts
+            this.timeouts.forEach(id => clearTimeout(id));
+            this.timeouts.clear();
+            
+            // Remove event listeners
+            this.eventListeners.forEach((listeners, key) => {
+                listeners.forEach(({ element, event, handler }) => {
+                    try {
+                        element.removeEventListener(event, handler);
+                    } catch (e) {
+                        console.warn('Failed to remove event listener:', e);
+                    }
+                });
+            });
+            this.eventListeners.clear();
+            
+            // Clear DOM cache
+            domCache.lastValues.clear();
+            domCache.updateThrottle.clear();
+            
+            console.log('All resources cleaned up');
+        }
+    };
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        resourceManager.cleanup();
+    });
+    
+    // Performance monitoring (optional - can be disabled in production)
+    const performanceMonitor = {
+        enabled: localStorage.getItem('f1_debug_performance') === 'true',
+        lastGC: 0,
+        
+        log() {
+            if (!this.enabled || !window.performance?.memory) return;
+            
+            const memory = window.performance.memory;
+            const now = performance.now();
+            
+            // Log every 30 seconds
+            if (now - this.lastGC > 30000) {
+                console.log('F1 Dashboard Performance:', {
+                    'Memory Used (MB)': (memory.usedJSHeapSize / 1024 / 1024).toFixed(2),
+                    'Memory Total (MB)': (memory.totalJSHeapSize / 1024 / 1024).toFixed(2),
+                    'DOM Cache Size': domCache.lastValues.size,
+                    'Tracked Intervals': resourceManager.intervals.size,
+                    'Tracked Timeouts': resourceManager.timeouts.size
+                });
+                this.lastGC = now;
+            }
+        }
+    };
+    
+    // Monitor performance every 5 seconds if enabled
+    if (performanceMonitor.enabled) {
+        resourceManager.setInterval(() => performanceMonitor.log(), 5000);
+    }
+    
+    // Session management
+    const sessionManager = {
+        currentSession: null,
+        sessionData: [],
+        driverName: localStorage.getItem('f1_driver_name') || null,
+        
+        init() {
+            this.loadSessionData();
+            this.checkInitialState();
+            this.setupEventListeners();
+        },
+        
+        checkInitialState() {
+            // Start by showing the leaderboard instead of name modal
+            this.showLeaderboard();
+        },
+        
+        showNameModal() {
+            const modal = document.getElementById('nameModal');
+            const input = document.getElementById('driverNameInput');
+            modal.classList.add('show');
+            
+            // Focus on input
+            resourceManager.setTimeout(() => input.focus(), 100);
+            
+            // Allow Enter key to submit
+            const keyHandler = (e) => {
+                if (e.key === 'Enter') {
+                    this.startSession();
+                }
+            };
+            resourceManager.addEventListener(input, 'keypress', keyHandler);
+        },
+        
+        startSession() {
+            const input = document.getElementById('driverNameInput');
+            const name = input.value.trim();
+            
+            if (!name) {
+                input.style.borderColor = 'var(--accent-danger)';
+                input.placeholder = 'Please enter your name';
+                return;
+            }
+            
+            this.driverName = name;
+            localStorage.setItem('f1_driver_name', name);
+            
+            // Hide name modal
+            document.getElementById('nameModal').classList.remove('show');
+            
+            // Initialize new session
+            this.currentSession = {
+                id: Date.now(),
+                driverName: name,
+                startTime: new Date(),
+                lapTimes: [],
+                bestLapTime: null,
+                totalLaps: 0,
+                sessionEnded: false,
+                track: null // Will be populated from telemetry data
+            };
+            
+            console.log('Session started for:', name);
+            this.updateSessionUI();
+        },
+        
+        addLapTime(lapTime, lapNumber) {
+            if (!this.currentSession || lapTime <= 0) return;
+            
+            const lapData = {
+                lapNumber,
+                lapTime,
+                timestamp: new Date()
+            };
+            
+            this.currentSession.lapTimes.push(lapData);
+            this.currentSession.totalLaps = lapNumber;
+            
+            // Update best lap time
+            if (!this.currentSession.bestLapTime || lapTime < this.currentSession.bestLapTime) {
+                this.currentSession.bestLapTime = lapTime;
+            }
+            
+            this.saveSessionData();
+        },
+        
+        endSession() {
+            if (!this.currentSession) return;
+            
+            this.currentSession.endTime = new Date();
+            this.currentSession.sessionEnded = true;
+            
+            // Add to session history
+            this.sessionData.push(this.currentSession);
+            this.saveSessionData();
+            
+            // Show leaderboard with updated data
+            this.showLeaderboard();
+            
+            this.currentSession = null;
+            this.updateSessionUI();
+        },
+        
+        showLeaderboard() {
+            const leaderboard = document.getElementById('leaderboardScreen');
+            
+            this.populateOverallBestTimes();
+            this.populateTrackRecords();
+            this.populateRecentSessions();
+            this.populateTrackSelector();
+            
+            leaderboard.classList.add('show');
+        },
+        
+        populateOverallBestTimes() {
+            const container = document.getElementById('overallBestTimesBody');
+            const startMessage = document.getElementById('startMessage');
+            container.innerHTML = '';
+            
+            // Get all lap times from all sessions with track info
+            const allLaps = [];
+            this.sessionData.forEach(session => {
+                session.lapTimes.forEach(lap => {
+                    allLaps.push({
+                        driverName: session.driverName,
+                        lapTime: lap.lapTime,
+                        lapNumber: lap.lapNumber,
+                        sessionDate: session.startTime,
+                        track: session.track || 'Unknown Track'
+                    });
+                });
+            });
+            
+            // Sort by lap time (fastest first)
+            allLaps.sort((a, b) => a.lapTime - b.lapTime);
+            
+            if (allLaps.length === 0) {
+                // Show start message when no data
+                if (startMessage) startMessage.style.display = 'block';
+                return;
+            } else {
+                // Hide start message when there's data
+                if (startMessage) startMessage.style.display = 'none';
+            }
+            
+            // Show top 20 times to fit without scrolling
+            const topLaps = allLaps.slice(0, 20);
+            
+            topLaps.forEach((lap, index) => {
+                const row = document.createElement('div');
+                row.className = 'leaderboard-row';
+                
+                if (lap.driverName === this.driverName) {
+                    row.classList.add('current-driver');
+                }
+                
+                if (index === 0) {
+                    row.classList.add('record');
+                }
+                
+                const rankClass = index === 0 ? 'first' : index === 1 ? 'second' : index === 2 ? 'third' : '';
+                
+                row.innerHTML = `
+                    <div class="rank ${rankClass}">${index + 1}</div>
+                    <div class="driver">${lap.driverName}</div>
+                    <div class="track">${lap.track}</div>
+                    <div class="time">${this.formatTime(lap.lapTime)}</div>
+                    <div class="date">${new Date(lap.sessionDate).toLocaleDateString()}</div>
+                `;
+                
+                container.appendChild(row);
+            });
+        },
+        
+        populateTrackRecords() {
+            const container = document.getElementById('trackRecords');
+            container.innerHTML = '';
+            
+            // Group lap times by track
+            const trackTimes = {};
+            this.sessionData.forEach(session => {
+                const track = session.track || 'Unknown Track';
+                if (!trackTimes[track]) {
+                    trackTimes[track] = [];
+                }
+                
+                session.lapTimes.forEach(lap => {
+                    trackTimes[track].push({
+                        driverName: session.driverName,
+                        lapTime: lap.lapTime,
+                        sessionDate: session.startTime
+                    });
+                });
+            });
+            
+            // Find best time for each track
+            const trackRecords = [];
+            Object.entries(trackTimes).forEach(([track, times]) => {
+                const sortedTimes = times.sort((a, b) => a.lapTime - b.lapTime);
+                if (sortedTimes.length > 0) {
+                    trackRecords.push({
+                        track,
+                        ...sortedTimes[0]
+                    });
+                }
+            });
+            
+            // Sort by track name and limit to fit without scrolling
+            trackRecords.sort((a, b) => a.track.localeCompare(b.track));
+            const limitedTrackRecords = trackRecords.slice(0, 8);
+            
+            if (trackRecords.length === 0) {
+                container.innerHTML = '<div class="empty-state">No track records yet.</div>';
+                return;
+            }
+            
+            limitedTrackRecords.forEach(record => {
+                const item = document.createElement('div');
+                item.className = 'track-record-item';
+                
+                item.innerHTML = `
+                    <div class="track-record-info">
+                        <h3>${record.track}</h3>
+                        <div class="record-holder">${record.driverName}</div>
+                        <div class="record-time">${this.formatTime(record.lapTime)}</div>
+                    </div>
+                    <div class="date">${new Date(record.sessionDate).toLocaleDateString()}</div>
+                `;
+                
+                container.appendChild(item);
+            });
+        },
+        
+        populateRecentSessions() {
+            const container = document.getElementById('recentSessions');
+            container.innerHTML = '';
+            
+            // Get recent sessions (last 6 to fit without scrolling)
+            const recentSessions = [...this.sessionData]
+                .sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
+                .slice(0, 6);
+            
+            if (recentSessions.length === 0) {
+                container.innerHTML = '<div class="empty-state">No recent sessions.</div>';
+                return;
+            }
+            
+            recentSessions.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'session-item';
+                
+                item.innerHTML = `
+                    <h3>
+                        ${session.driverName}
+                        <span class="date">${new Date(session.startTime).toLocaleDateString()}</span>
+                    </h3>
+                    <div><strong>Track:</strong> ${session.track || 'Unknown'}</div>
+                    <div class="session-stats-grid">
+                        <div class="session-stat">
+                            <div class="session-stat-label">Total Laps</div>
+                            <div class="session-stat-value">${session.totalLaps || 0}</div>
+                        </div>
+                        <div class="session-stat">
+                            <div class="session-stat-label">Best Lap</div>
+                            <div class="session-stat-value">${session.bestLapTime ? this.formatTime(session.bestLapTime) : '--'}</div>
+                        </div>
+                        <div class="session-stat">
+                            <div class="session-stat-label">Duration</div>
+                            <div class="session-stat-value">${this.calculateSessionDuration(session)}</div>
+                        </div>
+                        <div class="session-stat">
+                            <div class="session-stat-label">Avg Lap</div>
+                            <div class="session-stat-value">${this.calculateAverageLapTime(session)}</div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(item);
+            });
+        },
+        
+        populateTrackSelector() {
+            const selector = document.getElementById('trackFilter');
+            const currentOptions = Array.from(selector.options).map(opt => opt.value);
+            
+            // Get unique tracks
+            const tracks = new Set();
+            this.sessionData.forEach(session => {
+                if (session.track) {
+                    tracks.add(session.track);
+                }
+            });
+            
+            // Add new tracks to selector
+            tracks.forEach(track => {
+                if (!currentOptions.includes(track)) {
+                    const option = document.createElement('option');
+                    option.value = track;
+                    option.textContent = track;
+                    selector.appendChild(option);
+                }
+            });
+        },
+        
+        filterLeaderboardByTrack(selectedTrack) {
+            // Re-populate the overall best times with filtering
+            const container = document.getElementById('overallBestTimesBody');
+            container.innerHTML = '';
+            
+            // Get all lap times from all sessions with track filtering
+            const allLaps = [];
+            this.sessionData.forEach(session => {
+                session.lapTimes.forEach(lap => {
+                    const track = session.track || 'Unknown Track';
+                    if (selectedTrack === 'all' || track === selectedTrack) {
+                        allLaps.push({
+                            driverName: session.driverName,
+                            lapTime: lap.lapTime,
+                            lapNumber: lap.lapNumber,
+                            sessionDate: session.startTime,
+                            track: track
+                        });
+                    }
+                });
+            });
+            
+            // Sort by lap time (fastest first)
+            allLaps.sort((a, b) => a.lapTime - b.lapTime);
+            
+            if (allLaps.length === 0) {
+                container.innerHTML = '<div class="empty-state">No lap times for this track yet.</div>';
+                return;
+            }
+            
+            // Show top 20 times to fit without scrolling
+            const topLaps = allLaps.slice(0, 20);
+            
+            topLaps.forEach((lap, index) => {
+                const row = document.createElement('div');
+                row.className = 'leaderboard-row';
+                
+                if (lap.driverName === this.driverName) {
+                    row.classList.add('current-driver');
+                }
+                
+                if (index === 0) {
+                    row.classList.add('record');
+                }
+                
+                const rankClass = index === 0 ? 'first' : index === 1 ? 'second' : index === 2 ? 'third' : '';
+                
+                row.innerHTML = `
+                    <div class="rank ${rankClass}">${index + 1}</div>
+                    <div class="driver">${lap.driverName}</div>
+                    <div class="track">${lap.track}</div>
+                    <div class="time">${this.formatTime(lap.lapTime)}</div>
+                    <div class="date">${new Date(lap.sessionDate).toLocaleDateString()}</div>
+                `;
+                
+                container.appendChild(row);
+            });
+        },
+        
+        populateSessionStats(container) {
+            container.innerHTML = '';
+            
+            const currentSessionStats = this.currentSession || this.sessionData[this.sessionData.length - 1];
+            
+            if (!currentSessionStats) {
+                container.innerHTML = '<div class="empty-state">No session data available.</div>';
+                return;
+            }
+            
+            const stats = [
+                {
+                    label: 'Total Laps',
+                    value: currentSessionStats.totalLaps
+                },
+                {
+                    label: 'Best Lap Time',
+                    value: currentSessionStats.bestLapTime ? this.formatTime(currentSessionStats.bestLapTime) : '--:--.---'
+                },
+                {
+                    label: 'Average Lap Time',
+                    value: this.calculateAverageLapTime(currentSessionStats)
+                },
+                {
+                    label: 'Session Duration',
+                    value: this.calculateSessionDuration(currentSessionStats)
+                }
+            ];
+            
+            stats.forEach(stat => {
+                const statEl = document.createElement('div');
+                statEl.className = 'stat-item';
+                statEl.innerHTML = `
+                    <div class="stat-label">${stat.label}</div>
+                    <div class="stat-value">${stat.value}</div>
+                `;
+                container.appendChild(statEl);
+            });
+        },
+        
+        getBestLapForDriver(driverName) {
+            let bestTime = null;
+            this.sessionData.forEach(session => {
+                if (session.driverName === driverName) {
+                    session.lapTimes.forEach(lap => {
+                        if (!bestTime || lap.lapTime < bestTime) {
+                            bestTime = lap.lapTime;
+                        }
+                    });
+                }
+            });
+            return bestTime;
+        },
+        
+        calculateAverageLapTime(session) {
+            if (!session.lapTimes || session.lapTimes.length === 0) return '--:--.---';
+            
+            const validLaps = session.lapTimes.filter(lap => lap.lapTime > 0);
+            if (validLaps.length === 0) return '--:--.---';
+            
+            const total = validLaps.reduce((sum, lap) => sum + lap.lapTime, 0);
+            const average = total / validLaps.length;
+            
+            return this.formatTime(average);
+        },
+        
+        calculateSessionDuration(session) {
+            if (!session.startTime) return '0:00';
+            
+            const endTime = session.endTime || new Date();
+            const duration = endTime - new Date(session.startTime);
+            const minutes = Math.floor(duration / 60000);
+            const seconds = Math.floor((duration % 60000) / 1000);
+            
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        },
+        
+        formatTime(timeInSeconds) {
+            if (timeInSeconds === null || timeInSeconds === undefined || timeInSeconds <= 0) {
+                return "--:--.---";
+            }
+            const minutes = Math.floor(timeInSeconds / 60);
+            const seconds = Math.floor(timeInSeconds % 60);
+            const milliseconds = Math.floor((timeInSeconds * 1000) % 1000);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+        },
+        
+        updateSessionUI() {
+            const endSessionBtn = document.getElementById('endSessionBtn');
+            const leaderboardBtn = document.getElementById('viewSummaryBtn');
+            const closeBtn = document.getElementById('closeLeaderboardBtn');
+            
+            if (this.currentSession) {
+                // During session: show end session button, hide leaderboard button
+                if (endSessionBtn) endSessionBtn.style.display = 'block';
+                if (leaderboardBtn) leaderboardBtn.style.display = 'none';
+                if (closeBtn) closeBtn.style.display = 'none';
+            } else {
+                // No session: show leaderboard button, hide end session button  
+                if (endSessionBtn) endSessionBtn.style.display = 'none';
+                if (leaderboardBtn) leaderboardBtn.style.display = 'block';
+                if (closeBtn) closeBtn.style.display = 'block';
+            }
+        },
+        
+        saveSessionData() {
+            localStorage.setItem('f1_session_data', JSON.stringify(this.sessionData));
+        },
+        
+        loadSessionData() {
+            const saved = localStorage.getItem('f1_session_data');
+            if (saved) {
+                try {
+                    this.sessionData = JSON.parse(saved);
+                } catch (e) {
+                    console.error('Error loading session data:', e);
+                    this.sessionData = [];
+                }
+            }
+        },
+        
+        setupEventListeners() {
+            // Start session button
+            document.getElementById('startSessionBtn').addEventListener('click', () => {
+                this.startSession();
+            });
+            
+            // Start new session from leaderboard
+            document.getElementById('startNewSessionBtn').addEventListener('click', () => {
+                document.getElementById('leaderboardScreen').classList.remove('show');
+                this.showNameModal();
+            });
+            
+            // Close leaderboard button
+            document.getElementById('closeLeaderboardBtn').addEventListener('click', () => {
+                document.getElementById('leaderboardScreen').classList.remove('show');
+            });
+            
+            // Track filter change
+            document.getElementById('trackFilter').addEventListener('change', (e) => {
+                this.filterLeaderboardByTrack(e.target.value);
+            });
+            
+            // End session button
+            document.getElementById('endSessionBtn').addEventListener('click', () => {
+                if (this.currentSession) {
+                    this.endSession();
+                }
+            });
+            
+            // View leaderboard button  
+            document.getElementById('viewSummaryBtn').addEventListener('click', () => {
+                this.showLeaderboard();
+            });
+            
+            // Close modals on outside click
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal')) {
+                    e.target.classList.remove('show');
+                }
+            });
+            
+            // Detect session end (when no data received for a while)
+            this.setupSessionEndDetection();
+        },
+        
+        setupSessionEndDetection() {
+            let lastDataTime = Date.now();
+            let sessionEndTimer = null;
+            
+            // Reset timer when data is received
+            window.addEventListener('telemetry-data', () => {
+                lastDataTime = Date.now();
+                
+                if (sessionEndTimer) {
+                    clearTimeout(sessionEndTimer);
+                }
+                
+                // Set timer to end session after 30 seconds of no data
+                sessionEndTimer = resourceManager.setTimeout(() => {
+                    if (this.currentSession && !this.currentSession.sessionEnded) {
+                        console.log('Session ended due to inactivity');
+                        this.endSession();
+                    }
+                }, 30000);
+            });
+        }
+    };
+    
+    // Initialize session manager
+    sessionManager.init();
+    
+    // Make session manager globally accessible
+    window.sessionManager = sessionManager;
+    
     // Performance data arrays for charts
     const lapData = {
         labels: [],        // Lap numbers
@@ -8,21 +738,39 @@ document.addEventListener('DOMContentLoaded', (event) => {
         personalBest: null // Personal best time
     };
     
+    // Track the current lap number for chart updates
+    let lastProcessedLap = 0;
+    
+    // Connection and data quality tracking
+    let connectionState = 'connecting';
+    let lastDataTimestamp = 0;
+    let dataPointsReceived = 0;
+    let dataPointsPerSecond = 0;
+    let lapTimeHistory = [];
+    let performanceTrend = 'analyzing';
+    
     const sectorData = {
-        labels: [],              // Lap numbers
-        sector1: [],             // Sector 1 times
-        sector2: [],             // Sector 2 times
-        sector3: [],             // Sector 3 times
+        currentSector1: null,    // Current lap sector 1 time
+        currentSector2: null,    // Current lap sector 2 time
+        currentSector3: null,    // Current lap sector 3 time (calculated)
         bestSector1: null,       // Best sector 1 time
         bestSector2: null,       // Best sector 2 time
         bestSector3: null        // Best sector 3 time
     };
     
     const speedTraceData = {
-        labels: [],        // Distance points
-        currentLap: [],    // Speed at each point for current lap
-        bestLap: []        // Speed at each point for best lap
+        currentLapSpeeds: [],     // Speed points for current lap
+        currentLapDistances: [],  // Distance points for current lap
+        bestLapSpeeds: [],        // Speed points for best lap
+        bestLapDistances: [],     // Distance points for best lap
+        bestLapTime: null,        // Best lap time for comparison
+        lapStartTime: null,       // Track lap start time for fallback
+        lastLapNumber: 0          // Track lap changes
     };
+    
+    // Speed trace collection
+    let speedSampleCounter = 0;
+    const SPEED_SAMPLE_INTERVAL = 5; // Sample every 5th data point for more detailed speed traces
 
     // --- Gauge Configuration ---
     const gaugeOptions = {
@@ -160,8 +908,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
         
         // Charts & Events
         lapTimeChart: document.getElementById('lapTimeChart'),
-        sectorChart: document.getElementById('sectorChart'),
-        speedTraceChart: document.getElementById('speedTraceChart'),
         eventList: document.getElementById('eventList'),
         aiCoachMessages: document.getElementById('ai-coach-messages'),
         
@@ -175,7 +921,15 @@ document.addEventListener('DOMContentLoaded', (event) => {
         // Strategy Alerts
         tireAlert: document.getElementById('tireAlert'),
         fuelAlert: document.getElementById('fuelAlert'),
-        weatherAlert: document.getElementById('weatherAlert')
+        weatherAlert: document.getElementById('weatherAlert'),
+        
+        // Status Indicators
+        connectionIndicator: document.getElementById('connectionIndicator'),
+        connectionText: document.getElementById('connectionText'),
+        qualityIndicator: document.getElementById('qualityIndicator'),
+        qualityText: document.getElementById('qualityText'),
+        trendIndicator: document.getElementById('trendIndicator'),
+        trendText: document.getElementById('trendText')
     };
 
     // --- Helper Functions ---
@@ -293,12 +1047,31 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
 
     // Update fuel strategy calculations
-    function updateFuelStrategy(currentFuel, lapNumber, totalLaps = 50) {
-        if (!currentLapStartFuel || currentLapStartFuel === currentFuel) return;
+    function updateFuelStrategy(data) {
+        if (!data.fuelInTank || !data.lapNumber) {
+            // Show "No Data" when fuel data is not available
+            if (elements.fuelConsumption) {
+                elements.fuelConsumption.textContent = 'No Data';
+            }
+            if (elements.pitWindow) {
+                elements.pitWindow.textContent = 'No Data';
+            }
+            return;
+        }
+        
+        const currentFuel = data.fuelInTank;
+        const lapNumber = data.lapNumber;
+        const totalLaps = data.totalLaps || 50; // Use actual total laps if available
+        
+        // Initialize tracking on first lap or fuel reset
+        if (!currentLapStartFuel || currentFuel > currentLapStartFuel + 10) { // +10 accounts for refueling
+            currentLapStartFuel = currentFuel;
+            return;
+        }
         
         // Calculate fuel consumption for this lap
         const lapConsumption = currentLapStartFuel - currentFuel;
-        if (lapConsumption > 0) {
+        if (lapConsumption > 0 && lapConsumption < 10) { // Reasonable consumption (0-10kg per lap)
             fuelConsumptionHistory.push(lapConsumption);
             
             // Keep only last 5 laps for average
@@ -307,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
             }
         }
         
-        // Calculate average consumption
+        // Calculate average consumption and display
         if (fuelConsumptionHistory.length > 0) {
             const avgConsumption = fuelConsumptionHistory.reduce((a, b) => a + b) / fuelConsumptionHistory.length;
             
@@ -315,23 +1088,142 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 elements.fuelConsumption.textContent = `${avgConsumption.toFixed(2)} kg/lap`;
             }
             
-            // Calculate pit window
+            // Calculate pit window based on real data
             const remainingLaps = totalLaps - lapNumber;
             const lapsWithCurrentFuel = Math.floor(currentFuel / avgConsumption);
             
-            if (lapsWithCurrentFuel < remainingLaps && elements.pitWindow) {
-                const pitLapStart = Math.max(lapNumber + 1, lapNumber + lapsWithCurrentFuel - 3);
-                const pitLapEnd = lapNumber + lapsWithCurrentFuel;
-                elements.pitWindow.textContent = `Lap ${pitLapStart}-${pitLapEnd}`;
-                
-                // Show fuel alert if pit stop needed soon
-                if (lapsWithCurrentFuel <= 5 && elements.fuelAlert) {
-                    elements.fuelAlert.style.display = 'flex';
+            if (elements.pitWindow) {
+                if (lapsWithCurrentFuel >= remainingLaps) {
+                    elements.pitWindow.textContent = 'Fuel OK';
+                } else {
+                    const pitLapStart = Math.max(lapNumber + 1, lapNumber + lapsWithCurrentFuel - 3);
+                    const pitLapEnd = lapNumber + lapsWithCurrentFuel;
+                    elements.pitWindow.textContent = `Pit: Lap ${pitLapStart}-${pitLapEnd}`;
                 }
+            }
+            
+            // Show fuel alert if pit stop needed soon
+            if (elements.fuelAlert) {
+                if (lapsWithCurrentFuel <= 5 && lapsWithCurrentFuel < remainingLaps) {
+                    elements.fuelAlert.style.display = 'flex';
+                } else {
+                    elements.fuelAlert.style.display = 'none';
+                }
+            }
+        } else {
+            // Not enough data yet
+            if (elements.fuelConsumption) {
+                elements.fuelConsumption.textContent = 'Calculating...';
+            }
+            if (elements.pitWindow) {
+                elements.pitWindow.textContent = 'Analyzing...';
             }
         }
         
         currentLapStartFuel = currentFuel;
+    }
+
+    // Connection Status Management
+    function updateConnectionStatus(status) {
+        if (connectionState === status) return;
+        
+        connectionState = status;
+        
+        if (elements.connectionIndicator && elements.connectionText) {
+            elements.connectionIndicator.className = 'status-indicator ' + status;
+            
+            switch(status) {
+                case 'connected':
+                    elements.connectionText.textContent = 'Connected';
+                    break;
+                case 'connecting':
+                    elements.connectionText.textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    elements.connectionText.textContent = 'Disconnected';
+                    break;
+            }
+        }
+    }
+
+    // Data Quality Monitoring
+    function updateDataQuality() {
+        const now = performance.now();
+        dataPointsReceived++;
+        
+        // Calculate data rate every second
+        if (now - lastDataTimestamp > 1000) {
+            dataPointsPerSecond = dataPointsReceived;
+            dataPointsReceived = 0;
+            lastDataTimestamp = now;
+            
+            // Update quality indicator based on data rate
+            let quality = 'bad';
+            let qualityText = 'No Data';
+            
+            if (dataPointsPerSecond >= 50) {
+                quality = 'excellent';
+                qualityText = 'Excellent';
+            } else if (dataPointsPerSecond >= 30) {
+                quality = 'good';
+                qualityText = 'Good';
+            } else if (dataPointsPerSecond >= 10) {
+                quality = 'poor';
+                qualityText = 'Poor';
+            }
+            
+            if (elements.qualityIndicator && elements.qualityText) {
+                elements.qualityIndicator.className = 'quality-indicator ' + quality;
+                elements.qualityText.textContent = qualityText + ` (${dataPointsPerSecond}Hz)`;
+            }
+        }
+    }
+
+    // Performance Trend Analysis
+    function updatePerformanceTrend(lapTime) {
+        if (!lapTime || lapTime <= 0) return;
+        
+        lapTimeHistory.push(lapTime);
+        
+        // Keep only last 5 laps for trend analysis
+        if (lapTimeHistory.length > 5) {
+            lapTimeHistory.shift();
+        }
+        
+        if (lapTimeHistory.length >= 3) {
+            const recent = lapTimeHistory.slice(-3);
+            const older = lapTimeHistory.slice(0, -2);
+            
+            const recentAvg = recent.reduce((a, b) => a + b) / recent.length;
+            const olderAvg = older.reduce((a, b) => a + b) / older.length;
+            
+            const improvementThreshold = 0.5; // 0.5 seconds
+            
+            let trend = 'stable';
+            let trendText = 'Consistent';
+            
+            if (recentAvg < olderAvg - improvementThreshold) {
+                trend = 'improving';
+                trendText = 'Improving';
+            } else if (recentAvg > olderAvg + improvementThreshold) {
+                trend = 'declining';
+                trendText = 'Declining';
+            }
+            
+            if (elements.trendIndicator && elements.trendText) {
+                elements.trendIndicator.className = 'trend-indicator ' + trend;
+                elements.trendText.textContent = trendText;
+                
+                // Update indicator symbol based on trend
+                if (trend === 'improving') {
+                    elements.trendIndicator.textContent = '▲';
+                } else if (trend === 'declining') {
+                    elements.trendIndicator.textContent = '▼';
+                } else {
+                    elements.trendIndicator.textContent = '●';
+                }
+            }
+        }
     }
 
     // Advanced strategy alerts
@@ -411,13 +1303,16 @@ document.addEventListener('DOMContentLoaded', (event) => {
     eventSource.onopen = function() {
         console.log("SSE Connection Opened with high-performance mode");
         addEventToList("Connected to telemetry stream.", "info");
+        updateConnectionStatus('connected');
     };
 
     eventSource.onerror = function(err) {
         console.error("SSE Error:", err);
         addEventToList("Connection error or stream closed.", "alert");
+        updateConnectionStatus('disconnected');
         // For local operation, attempt aggressive reconnection
         setTimeout(() => {
+            updateConnectionStatus('connecting');
             if (eventSource.readyState === EventSource.CLOSED) {
                 console.log("Attempting aggressive reconnection...");
                 location.reload(); // Force page reload for local development
@@ -446,11 +1341,23 @@ document.addEventListener('DOMContentLoaded', (event) => {
             const data = JSON.parse(event.data);
             // console.log("Parsed Data:", data); // Debugging
 
+            // Fire telemetry data event for session management
+            window.dispatchEvent(new CustomEvent('telemetry-data', { detail: data }));
+            
+            // Update data quality monitoring
+            updateDataQuality();
+
             // --- Update Dashboard Elements ---
 
-            // Session Info
-            updateText(elements.driverName, data.driverName);
+            // Session Info - use captured driver name if available
+            const displayName = window.sessionManager?.driverName || data.driverName;
+            updateText(elements.driverName, displayName);
             updateText(elements.trackName, data.track);
+            
+            // Update current session with track info
+            if (window.sessionManager?.currentSession && data.track) {
+                window.sessionManager.currentSession.track = data.track;
+            }
             updateText(elements.lapNumber, data.lapNumber);
             // Update position with styling for podium spots
             if (elements.position) {
@@ -486,10 +1393,21 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 updateDeltaTiming(data.lapTimeSoFar, personalBestLapTime);
             }
             
-            // Update sector analysis (simplified - would need actual sector times from telemetry)
-            if (data.sector !== undefined && data.lapTimeSoFar) {
-                const estimatedSectorTime = data.lapTimeSoFar / (data.sector + 1) * 20; // Rough estimate
-                updateSectorAnalysis(data.sector, estimatedSectorTime);
+            // Update sector analysis with real sector times if available  
+            if (data.sectorTimes) {
+                // Process real sector times from telemetry for display only
+                if (data.sectorTimes.sector1 !== null && data.sectorTimes.sector1 !== undefined) {
+                    sectorData.currentSector1 = data.sectorTimes.sector1 / 1000; // Convert ms to seconds
+                    updateSectorDisplay(0, sectorData.currentSector1);
+                }
+                if (data.sectorTimes.sector2 !== null && data.sectorTimes.sector2 !== undefined) {
+                    sectorData.currentSector2 = data.sectorTimes.sector2 / 1000;
+                    updateSectorDisplay(1, sectorData.currentSector2);
+                }
+                if (data.sectorTimes.sector3 !== null && data.sectorTimes.sector3 !== undefined) {
+                    sectorData.currentSector3 = data.sectorTimes.sector3 / 1000;
+                    updateSectorDisplay(2, sectorData.currentSector3);
+                }
             }
             // Update lap validity with proper styling
             updateText(elements.lapValid, data.lapValid ? 'Valid' : 'Invalid');
@@ -617,9 +1535,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
             }
             
             // Update fuel strategy
-            if (data.fuelInTank && data.lapNumber) {
-                updateFuelStrategy(data.fuelInTank, data.lapNumber);
-            }
+            updateFuelStrategy(data);
             
             // Check for strategy alerts
             checkStrategyAlerts(data);
@@ -713,15 +1629,25 @@ document.addEventListener('DOMContentLoaded', (event) => {
             
             // Generate additional events from data changes
             if (data.lapCompleted && data.lastLapTime) {
-                addEventToList(`Lap ${data.lapNumber - 1} completed: ${formatTime(data.lastLapTime)}`, 'lap');
+                const completedLapNumber = data.lapNumber - 1;
+                addEventToList(`Lap ${completedLapNumber} completed: ${formatTime(data.lastLapTime)}`, 'lap');
                 
-                // If charts are initialized, update them
-                if (window.lapTimeChart && data.lastLapTime > 0) {
-                    // Add new lap time to chart
-                    window.lapTimeChart.data.labels.push(data.lapNumber - 1);
-                    window.lapTimeChart.data.datasets[0].data.push(data.lastLapTime);
-                    window.lapTimeChart.update();
+                // Add lap time to session manager
+                if (window.sessionManager) {
+                    window.sessionManager.addLapTime(data.lastLapTime, completedLapNumber);
                 }
+                
+                // Update lap time chart
+                updateLapTimeChart(data.lastLapTime, completedLapNumber);
+                
+                // Update performance trend
+                updatePerformanceTrend(data.lastLapTime);
+            }
+            
+            // Update charts on every lap number change (more reliable than lapCompleted)
+            if (data.lapNumber && data.lapNumber !== lastProcessedLap && data.lastLapTime > 0) {
+                lastProcessedLap = data.lapNumber;
+                updateLapTimeChart(data.lastLapTime, data.lapNumber - 1);
             }
 
 
@@ -743,9 +1669,16 @@ document.addEventListener('DOMContentLoaded', (event) => {
     
     // Function to initialize all charts
     function initializeCharts() {
-        // Lap Time Chart
-        const lapTimeCtx = document.getElementById('lapTimeChart').getContext('2d');
-        window.lapTimeChart = new Chart(lapTimeCtx, {
+        try {
+            // Lap Time Chart
+            const lapTimeCanvas = document.getElementById('lapTimeChart');
+            if (!lapTimeCanvas) {
+                console.warn('Lap time chart canvas not found');
+                return;
+            }
+            
+            const lapTimeCtx = lapTimeCanvas.getContext('2d');
+            window.lapTimeChart = new Chart(lapTimeCtx, {
             type: 'line',
             data: {
                 labels: [],
@@ -799,167 +1732,44 @@ document.addEventListener('DOMContentLoaded', (event) => {
             }
         });
         
-        // Sector Performance Chart
-        const sectorCtx = document.getElementById('sectorChart').getContext('2d');
-        window.sectorChart = new Chart(sectorCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Sector 1', 'Sector 2', 'Sector 3'],
-                datasets: [{
-                    label: 'Current Lap',
-                    data: [null, null, null],
-                    backgroundColor: 'rgba(1, 118, 211, 0.7)',
-                    borderWidth: 0
-                }, {
-                    label: 'Best Lap',
-                    data: [null, null, null],
-                    backgroundColor: 'rgba(46, 132, 74, 0.7)',
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            boxWidth: 12,
-                            padding: 10
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return context.dataset.label + ': ' + formatTime(context.raw);
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: false,
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            callback: function(value) {
-                                return formatTime(value);
-                            }
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    }
-                }
-            }
-        });
+            console.log('Lap time chart initialized successfully');
+            console.log('Charts initialized successfully');
         
-        // Speed Trace Chart
-        const speedTraceCtx = document.getElementById('speedTraceChart').getContext('2d');
-        window.speedTraceChart = new Chart(speedTraceCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Current Lap',
-                    data: [],
-                    borderColor: 'rgba(1, 118, 211, 1)',
-                    backgroundColor: 'transparent',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    pointRadius: 0
-                }, {
-                    label: 'Best Lap',
-                    data: [],
-                    borderColor: 'rgba(46, 132, 74, 0.7)',
-                    backgroundColor: 'transparent',
-                    borderWidth: 1,
-                    borderDash: [5, 5],
-                    tension: 0.4,
-                    pointRadius: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: {
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            boxWidth: 12,
-                            padding: 10
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 350,
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        title: {
-                            display: true,
-                            text: 'Speed (km/h)',
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        title: {
-                            display: true,
-                            text: 'Lap Distance',
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        }
-                    }
-                }
-            }
-        });
+        } catch (error) {
+            console.error('Error initializing charts:', error);
+        }
     }
     
     // Initialize input overlay chart
     function initializeInputOverlay() {
-        const canvas = elements.inputOverlayChart;
+        const canvas = document.getElementById('inputOverlayCanvas');
         if (!canvas) return;
         
-        // Set canvas size
-        canvas.width = canvas.offsetWidth * 2; // High DPI
-        canvas.height = canvas.offsetHeight * 2;
-        canvas.style.width = canvas.offsetWidth + 'px';
-        canvas.style.height = canvas.offsetHeight + 'px';
+        // Set canvas size for high DPI
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * 2;
+        canvas.height = rect.height * 2;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
         
         const ctx = canvas.getContext('2d');
-        ctx.scale(2, 2); // Scale for high DPI
+        ctx.scale(2, 2);
         
         // Store context for later use
         canvas.ctx = ctx;
+        canvas.rect = rect;
+        
+        console.log('Input overlay canvas initialized:', rect.width, 'x', rect.height);
     }
     
     // Update input overlay chart
     function updateInputOverlay(throttle, brake) {
-        const canvas = elements.inputOverlayChart;
-        if (!canvas || !canvas.ctx) return;
+        const canvas = document.getElementById('inputOverlayCanvas');
+        if (!canvas || !canvas.ctx || !canvas.rect) return;
         
         const ctx = canvas.ctx;
-        const width = canvas.offsetWidth;
-        const height = canvas.offsetHeight;
+        const width = canvas.rect.width;
+        const height = canvas.rect.height;
         
         // Add current input data to history
         inputHistory.push({ throttle, brake, time: Date.now() });
@@ -974,13 +1784,31 @@ document.addEventListener('DOMContentLoaded', (event) => {
         
         if (inputHistory.length < 2) return;
         
+        // Draw grid lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // Horizontal lines
+        for (let i = 0; i <= 4; i++) {
+            const y = (i / 4) * height;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        // Vertical lines
+        for (let i = 0; i <= 10; i++) {
+            const x = (i / 10) * width;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+        ctx.stroke();
+        
         // Draw throttle line (green)
         ctx.strokeStyle = '#2ecc71';
         ctx.lineWidth = 2;
         ctx.beginPath();
         
         inputHistory.forEach((point, index) => {
-            const x = (index / MAX_INPUT_HISTORY) * width;
+            const x = (index / (MAX_INPUT_HISTORY - 1)) * width;
             const y = height - (point.throttle * height);
             
             if (index === 0) {
@@ -997,7 +1825,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         ctx.beginPath();
         
         inputHistory.forEach((point, index) => {
-            const x = (index / MAX_INPUT_HISTORY) * width;
+            const x = (index / (MAX_INPUT_HISTORY - 1)) * width;
             const y = height - (point.brake * height);
             
             if (index === 0) {
@@ -1008,80 +1836,79 @@ document.addEventListener('DOMContentLoaded', (event) => {
         });
         ctx.stroke();
         
-        // Draw center line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
-        ctx.stroke();
+        // Draw labels
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '10px Roboto';
+        ctx.fillText('100%', 5, 12);
+        ctx.fillText('0%', 5, height - 5);
+        ctx.fillText('Throttle', width - 45, 12);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillText('Brake', width - 35, 25);
     }
     
-    // Updated functions for updating charts with real data
-    function updateLapTimeChart(chart, lapNumber, lapTime) {
-        // Add new lap data
-        lapData.labels.push(lapNumber);
-        lapData.times.push(lapTime);
+    // Improved chart update functions
+    function updateLapTimeChart(lapTime, lapNumber) {
+        if (!window.lapTimeChart || lapTime <= 0 || lapNumber <= 0) return;
         
-        // Update personal best if applicable
-        if (lapData.personalBest === null || lapTime < lapData.personalBest) {
-            lapData.personalBest = lapTime;
-        }
-        
-        // Update chart
-        chart.data.labels = lapData.labels;
-        chart.data.datasets[0].data = lapData.times;
-        chart.update();
-    }
-    
-    function updateSectorChart(chart, sectorTimes, lapNumber) {
-        // Add new sector data
-        if (sectorTimes && sectorTimes.length === 3) {
-            sectorData.labels.push(lapNumber);
-            sectorData.sector1.push(sectorTimes[0]);
-            sectorData.sector2.push(sectorTimes[1]);
-            sectorData.sector3.push(sectorTimes[2]);
+        try {
+            // Add new lap data
+            lapData.labels.push(lapNumber);
+            lapData.times.push(lapTime);
             
-            // Update best sectors if applicable
-            if (sectorData.bestSector1 === null || sectorTimes[0] < sectorData.bestSector1) {
-                sectorData.bestSector1 = sectorTimes[0];
+            // Update personal best if applicable
+            if (lapData.personalBest === null || lapTime < lapData.personalBest) {
+                lapData.personalBest = lapTime;
             }
-            if (sectorData.bestSector2 === null || sectorTimes[1] < sectorData.bestSector2) {
-                sectorData.bestSector2 = sectorTimes[1];
-            }
-            if (sectorData.bestSector3 === null || sectorTimes[2] < sectorData.bestSector3) {
-                sectorData.bestSector3 = sectorTimes[2];
+            
+            // Keep only last 20 laps for performance
+            if (lapData.labels.length > 20) {
+                lapData.labels.shift();
+                lapData.times.shift();
             }
             
             // Update chart
-            chart.data.datasets[0].data = [sectorTimes[0], sectorTimes[1], sectorTimes[2]];
-            chart.data.datasets[1].data = [
-                sectorData.bestSector1, 
-                sectorData.bestSector2, 
-                sectorData.bestSector3
-            ];
-            chart.update();
+            window.lapTimeChart.data.labels = [...lapData.labels];
+            window.lapTimeChart.data.datasets[0].data = [...lapData.times];
+            window.lapTimeChart.update('none'); // No animation for better performance
+            
+            console.log(`Lap time chart updated: Lap ${lapNumber}, Time: ${formatTime(lapTime)}`);
+        } catch (error) {
+            console.error('Error updating lap time chart:', error);
         }
     }
     
-    function updateSpeedTraceChart(chart, distancePoints, speeds, isBestLap) {
-        // Clear current lap data if starting new lap
-        if (distancePoints[0] === 0) {
-            speedTraceData.labels = distancePoints.map(d => d + '%');
-            speedTraceData.currentLap = speeds;
+    function updateSectorDisplay(sectorIndex, sectorTime) {
+        const sectorTimeElements = [elements.sector1Time, elements.sector2Time, elements.sector3Time];
+        const sectorElements = [elements.sector1, elements.sector2, elements.sector3];
+        
+        if (sectorIndex < 0 || sectorIndex > 2 || !sectorTimeElements[sectorIndex]) return;
+        
+        // Update sector time display
+        sectorTimeElements[sectorIndex].textContent = sectorTime ? sectorTime.toFixed(1) : '--.-';
+        
+        // Compare with personal best and update styling
+        const bestTimes = [sectorData.bestSector1, sectorData.bestSector2, sectorData.bestSector3];
+        
+        if (sectorTime && bestTimes[sectorIndex]) {
+            const element = sectorElements[sectorIndex];
+            element.classList.remove('personal-best', 'session-best', 'slower');
             
-            // If this is marked as best lap, update best lap data
-            if (isBestLap) {
-                speedTraceData.bestLap = speeds;
+            if (sectorTime < bestTimes[sectorIndex]) {
+                // New personal best
+                element.classList.add('personal-best');
+            } else if (sectorTime < bestTimes[sectorIndex] * 1.02) {
+                // Within 2% of best - good sector
+                element.classList.add('session-best');
+            } else {
+                // Slower sector
+                element.classList.add('slower');
             }
-            
-            // Update chart
-            chart.data.labels = speedTraceData.labels;
-            chart.data.datasets[0].data = speedTraceData.currentLap;
-            chart.data.datasets[1].data = speedTraceData.bestLap;
-            chart.update();
+        } else if (sectorTime) {
+            // First sector time - set as best
+            sectorElements[sectorIndex].classList.add('personal-best');
         }
     }
+    
     
     // Function to create and set up audio context for team radio
     const audioContext = {
@@ -1341,7 +2168,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 speechSynthesis.speak(utterance);
                 
                 // Chrome bug workaround - keep speech synthesis active
-                const resumeInterval = setInterval(() => {
+                const resumeInterval = resourceManager.setInterval(() => {
                     if (!this.speaking) {
                         clearInterval(resumeInterval);
                         return;

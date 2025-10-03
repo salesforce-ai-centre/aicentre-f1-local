@@ -30,11 +30,92 @@
     </script>
 </head>
 <body>
+    <!-- Name Capture Modal -->
+    <div id="nameModal" class="modal">
+        <div class="modal-content">
+            <h2>Enter Your Name</h2>
+            <p>Please enter your name before starting the session:</p>
+            <input type="text" id="driverNameInput" placeholder="Enter your name" maxlength="50">
+            <div class="modal-buttons">
+                <button id="startSessionBtn" class="btn-primary">Start Session</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full-Screen Leaderboard -->
+    <div id="leaderboardScreen" class="fullscreen-overlay">
+        <div class="leaderboard-container">
+            <div class="leaderboard-header">
+                <h1>F1 Leaderboard</h1>
+                <div class="header-controls">
+                    <div class="track-selector">
+                        <label for="trackFilter">Track:</label>
+                        <select id="trackFilter">
+                            <option value="all">All Tracks</option>
+                        </select>
+                    </div>
+                    <button id="startNewSessionBtn" class="btn-primary">Start New Session</button>
+                    <button id="closeLeaderboardBtn" class="btn-close">×</button>
+                </div>
+            </div>
+            
+            <div class="leaderboard-content">
+                <div class="leaderboard-section">
+                    <h2>Overall Best Times</h2>
+                    <div class="start-message" id="startMessage">
+                        <p>Click "Start New Session" above to begin racing!</p>
+                        <p>Your lap times will appear here after completing laps.</p>
+                    </div>
+                    <div class="leaderboard-table" id="overallBestTimes">
+                        <div class="table-header">
+                            <div class="rank">Rank</div>
+                            <div class="driver">Driver</div>
+                            <div class="track">Track</div>
+                            <div class="time">Lap Time</div>
+                            <div class="date">Date</div>
+                        </div>
+                        <div class="table-body" id="overallBestTimesBody">
+                            <!-- Best times will be populated here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="leaderboard-section">
+                    <h2>Track Records</h2>
+                    <div class="track-records" id="trackRecords">
+                        <!-- Track-specific records will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="leaderboard-section">
+                    <h2>Recent Sessions</h2>
+                    <div class="recent-sessions" id="recentSessions">
+                        <!-- Recent session summaries will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="top-bar">
         <div class="logo">
             <img src="https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg" alt="Salesforce Logo" class="sf-logo">
         </div>
         <h1>F1 Live Telemetry</h1>
+        <div class="status-indicators">
+            <div class="connection-status" id="connectionStatus">
+                <div class="status-indicator" id="connectionIndicator"></div>
+                <span class="status-text" id="connectionText">Connecting...</span>
+            </div>
+            <div class="data-quality" id="dataQuality">
+                <div class="quality-indicator" id="qualityIndicator"></div>
+                <span class="quality-text" id="qualityText">--</span>
+            </div>
+        </div>
+        <div class="session-controls">
+            <button id="endSessionBtn" class="btn-secondary" style="display: none;">End Session</button>
+            <button id="viewSummaryBtn" class="btn-secondary">Leaderboard</button>
+        </div>
     </div>
     
     <div class="grid-container">
@@ -73,6 +154,10 @@
                     <div class="time-label">Last Lap</div>
                     <div class="time-value" id="lastLapTime">--:--.---</div>
                     <div class="personal-best" id="personalBest">PB: --:--.---</div>
+                    <div class="performance-trend" id="performanceTrend">
+                        <span class="trend-indicator" id="trendIndicator">●</span>
+                        <span class="trend-text" id="trendText">Analyzing...</span>
+                    </div>
                 </div>
                 <div class="sector-timing">
                     <div class="sector-times">
@@ -169,8 +254,10 @@
                     </div>
                 </div>
                 <div class="input-overlay-container">
-                    <div class="overlay-title">Input Overlay</div>
-                    <div class="input-overlay-chart" id="inputOverlayChart"></div>
+                    <div class="overlay-title">Throttle vs Brake Trace</div>
+                    <div class="input-overlay-chart" id="inputOverlayChart">
+                        <canvas id="inputOverlayCanvas" width="300" height="80"></canvas>
+                    </div>
                 </div>
                 <div class="fuel-strategy-container">
                     <div class="strategy-title">Fuel Strategy</div>
@@ -369,22 +456,6 @@
             <h2>Lap Times</h2>
             <div class="chart-container">
                 <canvas id="lapTimeChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Sector Performance -->
-        <div class="card sector-perf" id="sector-perf-card">
-            <h2>Sector Performance</h2>
-            <div class="chart-container">
-                <canvas id="sectorChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Speed Trace -->
-        <div class="card speed-trace" id="speed-trace-card">
-            <h2>Speed Trace</h2>
-            <div class="chart-container">
-                <canvas id="speedTraceChart"></canvas>
             </div>
         </div>
 

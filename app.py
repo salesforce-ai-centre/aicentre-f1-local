@@ -7,6 +7,7 @@ import requests
 import random
 import jwt
 import base64
+import concurrent.futures
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, Response, jsonify, abort
 from dotenv import load_dotenv
@@ -101,6 +102,10 @@ message_queue = queue.Queue()
 latest_data = {}
 data_lock = threading.Lock() # To protect access to latest_data
 
+# AI processing thread pool for async operations
+ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="AI-Worker")
+pending_ai_tasks = {}  # Track pending AI tasks by type to avoid duplicates
+
 # --- Routes ---
 
 @app.route('/')
@@ -126,7 +131,6 @@ def receive_data():
 
     global latest_data, LAST_AI_MESSAGE_TIME, AI_MESSAGE_HISTORY
     event_to_send = None  # Event object to add to payload
-    ai_message = None  # AI coach message to add to payload
     current_time = time.time()
 
     with data_lock:
@@ -138,18 +142,16 @@ def receive_data():
                  event_to_send = {"message": f"Lap {lap_num} completed: {lap_time_str}", "type": "lap"}
                  app.logger.info(f"Event Detected: Lap {lap_num} completed")
                  
-                 # Get AI feedback for completed lap
+                 # Get AI feedback for completed lap (async)
                  if AI_ENABLED and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
-                     try:
-                         lap_data = {
-                             "lapTime": data.get("lastLapTime"),
-                             "lapNumber": lap_num,
-                             "previousLapTime": latest_data.get("lastLapTime")
-                         }
-                         ai_message = generate_ai_coach_message("lap_completed", lap_data)
-                     except Exception as e:
-                         app.logger.error(f"Failed to generate lap completion message: {e}")
-                         # Continue without a message
+                     lap_data = {
+                         "lapTime": data.get("lastLapTime"),
+                         "lapNumber": lap_num,
+                         "previousLapTime": latest_data.get("lastLapTime")
+                     }
+                     # Start async AI generation - no blocking
+                     generate_ai_coach_message_async("lap_completed", lap_data, data.get("sessionId"))
+                     LAST_AI_MESSAGE_TIME = current_time  # Update timestamp to prevent duplicates
 
         # Enhanced proactive strategy detection
         
@@ -164,19 +166,17 @@ def receive_data():
                 if fuel_used > 0:
                     laps_remaining_with_fuel = current_fuel / fuel_used if fuel_used > 0 else 999
                     
-                    # Pit stop strategy alert
+                    # Pit stop strategy alert (async)
                     if laps_remaining_with_fuel < 8 and random.random() < 0.3:  # 30% chance when low fuel
-                        try:
-                            strategy_data = {
-                                "fuelRemaining": current_fuel,
-                                "estimatedLapsLeft": laps_remaining_with_fuel,
-                                "lapNumber": lap_number,
-                                "fuelConsumption": fuel_used
-                            }
-                            ai_message = generate_ai_coach_message("fuel_strategy", strategy_data)
-                            app.logger.info(f"Event Detected: Fuel strategy recommendation")
-                        except Exception as e:
-                            app.logger.error(f"Failed to generate fuel strategy message: {e}")
+                        strategy_data = {
+                            "fuelRemaining": current_fuel,
+                            "estimatedLapsLeft": laps_remaining_with_fuel,
+                            "lapNumber": lap_number,
+                            "fuelConsumption": fuel_used
+                        }
+                        generate_ai_coach_message_async("fuel_strategy", strategy_data, data.get("sessionId"))
+                        LAST_AI_MESSAGE_TIME = current_time
+                        app.logger.info(f"Event Detected: Fuel strategy recommendation (async)")
 
         # Tire performance degradation
         if AI_ENABLED and data.get("tyreWear") and data.get("lapNumber") and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
@@ -190,17 +190,15 @@ def receive_data():
                 if wear > 0.7:  # 70% wear threshold
                     worn_tires[tire] = wear
             
-            # Proactive tire strategy
+            # Proactive tire strategy (async)
             if max_wear > 0.85 and random.random() < 0.4:  # 40% chance when tires very worn
-                try:
-                    ai_message = generate_ai_coach_message("tire_strategy", {
-                        "maxWear": max_wear,
-                        "wornTires": worn_tires,
-                        "lapNumber": data.get("lapNumber", 0)
-                    })
-                    app.logger.info(f"Event Detected: Tire strategy recommendation")
-                except Exception as e:
-                    app.logger.error(f"Failed to generate tire strategy message: {e}")
+                generate_ai_coach_message_async("tire_strategy", {
+                    "maxWear": max_wear,
+                    "wornTires": worn_tires,
+                    "lapNumber": data.get("lapNumber", 0)
+                }, data.get("sessionId"))
+                LAST_AI_MESSAGE_TIME = current_time
+                app.logger.info(f"Event Detected: Tire strategy recommendation (async)")
 
         # Performance coaching based on sector times
         if AI_ENABLED and data.get("sector") and data.get("lapTimeSoFar") and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
@@ -208,20 +206,18 @@ def receive_data():
             sector = data.get("sector", 0)
             lap_time_so_far = data.get("lapTimeSoFar", 0)
             
-            # If we're in sector 2 or 3 and going slower than expected
+            # If we're in sector 2 or 3 and going slower than expected (async)
             if sector >= 1 and lap_time_so_far > 0 and random.random() < 0.1:  # 10% chance for coaching
-                try:
-                    coaching_data = {
-                        "sector": sector + 1,  # Human-readable sector
-                        "lapTime": lap_time_so_far,
-                        "speed": data.get("speed", {}).get("current", 0),
-                        "throttle": data.get("throttle", {}).get("current", 0),
-                        "brake": data.get("brake", {}).get("current", 0)
-                    }
-                    ai_message = generate_ai_coach_message("performance_coaching", coaching_data)
-                    app.logger.info(f"Event Detected: Performance coaching")
-                except Exception as e:
-                    app.logger.error(f"Failed to generate performance coaching message: {e}")
+                coaching_data = {
+                    "sector": sector + 1,  # Human-readable sector
+                    "lapTime": lap_time_so_far,
+                    "speed": data.get("speed", {}).get("current", 0),
+                    "throttle": data.get("throttle", {}).get("current", 0),
+                    "brake": data.get("brake", {}).get("current", 0)
+                }
+                generate_ai_coach_message_async("performance_coaching", coaching_data, data.get("sessionId"))
+                LAST_AI_MESSAGE_TIME = current_time
+                app.logger.info(f"Event Detected: Performance coaching (async)")
 
         # Detect significant damage changes and get AI feedback
         if AI_ENABLED and data.get("damage") and latest_data.get("damage") and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
@@ -237,12 +233,9 @@ def receive_data():
                     damage_data[component] = current
             
             if damage_increase:
-                try:
-                    ai_message = generate_ai_coach_message("damage_detected", damage_data)
-                    app.logger.info(f"Event Detected: Significant damage increase")
-                except Exception as e:
-                    app.logger.error(f"Failed to generate damage message: {e}")
-                    # Continue without a message
+                generate_ai_coach_message_async("damage_detected", damage_data, data.get("sessionId"))
+                LAST_AI_MESSAGE_TIME = current_time
+                app.logger.info(f"Event Detected: Significant damage increase (async)")
         
         # Detect tire wear issues
         if AI_ENABLED and data.get("tyreWear") and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
@@ -257,36 +250,27 @@ def receive_data():
                     wear_data[tire] = wear
             
             if high_wear and random.random() < 0.3:  # Only trigger occasionally for tire wear
-                try:
-                    ai_message = generate_ai_coach_message("tire_wear", wear_data)
-                    app.logger.info(f"Event Detected: High tire wear")
-                except Exception as e:
-                    app.logger.error(f"Failed to generate tire wear message: {e}")
-                    # Continue without a message
+                generate_ai_coach_message_async("tire_wear", wear_data, data.get("sessionId"))
+                LAST_AI_MESSAGE_TIME = current_time
+                app.logger.info(f"Event Detected: High tire wear (async)")
         
         # Periodic strategic advice (every 30-60 seconds)
         elapsed_time = current_time - LAST_AI_MESSAGE_TIME
         if AI_ENABLED and elapsed_time > 45 and random.random() < 0.2:  # 20% chance after 45 seconds
-            try:
-                ai_message = generate_ai_coach_message("strategy", {
-                    "position": data.get("position", 0),
-                    "lapNumber": data.get("lapNumber", 0),
-                    "speed": data.get("speed", {}).get("current", 0),
-                    "trackName": data.get("track", "")
-                })
-                app.logger.info(f"Event: Providing periodic strategic advice")
-            except Exception as e:
-                app.logger.error(f"Failed to generate strategy message: {e}")
-                # Continue without a message
+            generate_ai_coach_message_async("strategy", {
+                "position": data.get("position", 0),
+                "lapNumber": data.get("lapNumber", 0),
+                "speed": data.get("speed", {}).get("current", 0),
+                "trackName": data.get("track", "")
+            }, data.get("sessionId"))
+            LAST_AI_MESSAGE_TIME = current_time
+            app.logger.info(f"Event: Providing periodic strategic advice (async)")
 
-        # Handle DRS availability
+        # Handle DRS availability (async)
         if AI_ENABLED and data.get("drsAllowed") and not latest_data.get("drsAllowed") and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL):
-            try:
-                ai_message = generate_ai_coach_message("drs_available", {})
-                app.logger.info(f"Event Detected: DRS now available")
-            except Exception as e:
-                app.logger.error(f"Failed to generate DRS message: {e}")
-                # Continue without a message
+            generate_ai_coach_message_async("drs_available", {}, data.get("sessionId"))
+            LAST_AI_MESSAGE_TIME = current_time
+            app.logger.info(f"Event Detected: DRS now available (async)")
 
         # Update latest data *after* comparison
         latest_data = data.copy()
@@ -295,16 +279,8 @@ def receive_data():
     if event_to_send:
         data["event"] = event_to_send
     
-    # Add AI coach message if one was generated
-    if ai_message:
-        LAST_AI_MESSAGE_TIME = current_time
-        data["aiCoach"] = ai_message
-        # Store in history
-        AI_MESSAGE_HISTORY.append(ai_message)
-        if len(AI_MESSAGE_HISTORY) > MAX_HISTORY_ITEMS:
-            AI_MESSAGE_HISTORY.pop(0)
-    # No else/fall back - if the API fails, we simply don't send a message
-    # This is preferable to sending inferior fallback messages
+    # AI messages are now handled asynchronously and sent separately
+    # This prevents blocking the main telemetry flow
 
     # Send to Data Cloud if enabled
     if datacloud_client:
@@ -490,16 +466,81 @@ def get_auth_token():
         app.logger.error(f"Error getting authorization token: {e}", exc_info=True)
         return None
 
-def generate_ai_coach_message(event_type, data):
+def generate_ai_coach_message_async(event_type, data, session_id=None):
     """
-    Generate an AI coach message using the Salesforce Models API.
+    Generate an AI coach message asynchronously using the Salesforce Models API.
     
     Args:
         event_type: Type of event (lap_completed, damage_detected, tire_wear, strategy, drs_available)
         data: Dictionary containing relevant data for the event
+        session_id: Session identifier to track the request
     
     Returns:
-        Dictionary with messageType and messageText
+        Future that resolves to Dictionary with messageType and messageText
+    """
+    def _generate_ai_message():
+        try:
+            # Check for recent similar messages to avoid repetition
+            for recent_msg in AI_MESSAGE_HISTORY:
+                if recent_msg.get("messageType") == event_type:
+                    # If we've sent this type of message recently, reduce chance of sending again
+                    if random.random() < 0.6:  # 60% chance to skip similar recent messages
+                        app.logger.info(f"Skipping {event_type} message to avoid repetition")
+                        return None
+            
+            # Create prompt based on event type
+            prompt = create_prompt_for_event(event_type, data)
+            
+            # Call the Salesforce Models API
+            message = call_models_api(prompt, data)
+            app.logger.info(f"Successfully generated AI message for {event_type}")
+            
+            # Return the formatted message
+            ai_message = {
+                "messageType": get_message_type_label(event_type),
+                "messageText": message
+            }
+            
+            # Send the AI message to clients via a separate data push
+            if session_id:
+                ai_payload = {
+                    "sessionId": session_id,
+                    "aiCoach": ai_message,
+                    "timestamp": time.time()
+                }
+                
+                try:
+                    json_data = json.dumps(ai_payload)
+                    message_queue.put(json_data)
+                    app.logger.info(f"AI message queued for session {session_id}")
+                except Exception as e:
+                    app.logger.error(f"Failed to queue AI message: {e}")
+            
+            return ai_message
+            
+        except Exception as e:
+            app.logger.error(f"Error generating AI coach message: {e}", exc_info=True)
+            return None
+        finally:
+            # Remove from pending tasks
+            if event_type in pending_ai_tasks:
+                del pending_ai_tasks[event_type]
+    
+    # Check if we already have a pending task for this event type
+    if event_type in pending_ai_tasks and not pending_ai_tasks[event_type].done():
+        app.logger.info(f"AI task for {event_type} already pending, skipping")
+        return pending_ai_tasks[event_type]
+    
+    # Submit the task to the thread pool
+    future = ai_executor.submit(_generate_ai_message)
+    pending_ai_tasks[event_type] = future
+    
+    return future
+
+def generate_ai_coach_message(event_type, data):
+    """
+    Legacy synchronous wrapper for backward compatibility.
+    This should only be used for immediate responses where blocking is acceptable.
     """
     try:
         # Check for recent similar messages to avoid repetition

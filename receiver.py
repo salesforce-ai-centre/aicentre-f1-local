@@ -12,6 +12,8 @@ import sys
 import argparse
 import logging
 import os
+import psutil
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
 from dotenv import load_dotenv
@@ -31,6 +33,11 @@ BACKOFF_RESET_THRESHOLD = MAX_SEND_RETRIES + 3 # Retries after which backoff int
 SOCKET_TIMEOUT_S = 1.0
 STATUS_UPDATE_INTERVAL_S = 60.0
 PACKET_BUFFER_SIZE = 2048
+
+# Performance optimization constants
+LOG_THROTTLE_INTERVAL = 10.0  # Only log debug messages every 10 seconds
+STATUS_LOG_INTERVAL = 30.0    # Status updates every 30 seconds instead of 60
+PERFORMANCE_MODE = False      # Disable performance optimizations temporarily
 
 # Packet IDs (From F1 24 Spec Page 2/3)
 PACKET_ID_MOTION = 0
@@ -625,6 +632,13 @@ class TelemetryBridge:
         self.last_send_time: float = self.start_time
         self.packets_received: int = 0
         self.player_car_index: int = -1 # Determined from header
+        
+        # Performance optimization tracking
+        if PERFORMANCE_MODE:
+            self._last_debug_log: float = 0.0
+            self._log_counter: int = 0
+            self._status_log_counter: int = 0
+            self._async_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="HTTP-Async")
 
         # State Data
         self.latest_lap_data: Optional[LapData] = None
@@ -1112,6 +1126,25 @@ class TelemetryBridge:
         frame_id = header.m_frameIdentifier if header else int(time.time()*1000)
         telemetry_id = f"{self.session_id}-{frame_id}-{int(time.time()*1000)}"
         
+        # Apply reasonable bounds checking for lap times
+        # F1 lap times should be between 0 and 10 minutes (600 seconds = 600,000 ms)
+        current_lap_time_ms = current_lap.m_currentLapTimeInMS
+        last_lap_time_ms = self.last_lap_time_ms if is_lap_complete else None
+        
+        # Validate current lap time (0 to 600 seconds)
+        if current_lap_time_ms > 600000:  # More than 10 minutes
+            logging.warning(f"Invalid current lap time received: {current_lap_time_ms}ms ({current_lap_time_ms/1000.0:.3f}s)")
+            current_lap_time_seconds = 0  # Reset to 0 if invalid
+        else:
+            current_lap_time_seconds = current_lap_time_ms / 1000.0
+        
+        # Validate last lap time (0 to 600 seconds)  
+        if last_lap_time_ms and last_lap_time_ms > 600000:  # More than 10 minutes
+            logging.warning(f"Invalid last lap time received: {last_lap_time_ms}ms ({last_lap_time_ms/1000.0:.3f}s)")
+            final_lap_time_sec = None  # Reset to None if invalid
+        else:
+            final_lap_time_sec = last_lap_time_ms / 1000.0 if last_lap_time_ms else None
+
         # Construct the main payload dictionary with all essential data
         payload = {
             "telemetryId": telemetry_id,  # Primary key for Data Cloud
@@ -1119,12 +1152,16 @@ class TelemetryBridge:
             "sessionId": self.session_id,
             "driverName": self.driver_name,
             "track": self.track_name,
-            "lapNumber": self.current_lap_num,
-            "lapTimeSoFar": current_lap.m_currentLapTimeInMS / 1000.0,
+            # Validate lap number (should be reasonable, 1-200 for any F1 session)
+            "lapNumber": self.current_lap_num if 1 <= self.current_lap_num <= 200 else 1,
+            
+            "lapTimeSoFar": current_lap_time_seconds,
             "lastLapTime": final_lap_time_sec,
             "lapCompleted": is_lap_complete,
-            "sector": current_lap.m_sector + 1, # Sectors are 0-based, add 1 for display
-            "position": current_lap.m_carPosition, # Position is 1-based
+            # Validate sector (should be 0, 1, or 2 from UDP, displayed as 1, 2, 3)
+            "sector": (current_lap.m_sector + 1) if current_lap.m_sector in [0, 1, 2] else 1,
+            # Validate position (should be 1-22 for F1)
+            "position": current_lap.m_carPosition if 1 <= current_lap.m_carPosition <= 22 else 1,
             "speed": {
                 "current": current_telemetry.m_speed,
                 "average": lap_stats.get("speed", {}).get("average"),
@@ -1230,19 +1267,38 @@ class TelemetryBridge:
         if not payload:
             return
 
-        # Log essential info even without debug
-        # Only log in debug mode
+        # Log essential info only in debug mode and with throttling
         if self.debug_mode:
-            logging.debug(f"📤 Sending Payload: Lap {payload.get('lapNumber', '?')}-S{payload.get('sector', '?')}, "
+            self._debug_log_throttled(f"📤 Sending Payload: Lap {payload.get('lapNumber', '?')}-S{payload.get('sector', '?')}, "
                          f"Speed:{payload.get('speed', {}).get('current', '?')}kmh")
-            try:
-                # Attempt to serialize with indentation for readability
-                logging.debug(f"Full payload:\n{json.dumps(payload, indent=2)}")
-            except TypeError as e:
-                logging.error(f"Payload contains non-serializable data: {e}")
-                logging.debug(f"Problematic payload structure: {payload}") # Log raw structure on error
+            
+            # Only log full payload occasionally to reduce overhead
+            if PERFORMANCE_MODE and hasattr(self, '_log_counter') and self._log_counter % 50 == 0:
+                try:
+                    self._debug_log_throttled(f"Full payload:\n{json.dumps(payload, indent=2)}", force=True)
+                except TypeError as e:
+                    logging.error(f"Payload contains non-serializable data: {e}")
 
+        # Use async sending if performance mode is enabled
+        if PERFORMANCE_MODE and hasattr(self, '_async_executor'):
+            self._send_http_async(payload)
+        else:
+            self._send_http_sync(payload)
 
+    def _send_http_async(self, payload: Dict[str, Any]):
+        """Send HTTP request asynchronously to prevent blocking UDP processing"""
+        future = self._async_executor.submit(self._send_http_sync, payload)
+        future.add_done_callback(self._handle_async_send_result)
+
+    def _handle_async_send_result(self, future):
+        """Handle the result of async HTTP send"""
+        try:
+            future.result()  # This will raise any exception that occurred
+        except Exception as e:
+            logging.error(f"Async HTTP send failed: {e}")
+
+    def _send_http_sync(self, payload: Dict[str, Any]):
+        """Synchronous HTTP send implementation"""
         headers = {
             'Content-Type': 'application/json',
             'User-Agent': f'{APP_NAME}/1.0',
@@ -1259,17 +1315,16 @@ class TelemetryBridge:
             self.connection_stats["total_response_time"] += elapsed_ms
 
             if 200 <= response.status_code < 300:
-                # Only log successful sends in debug mode
+                # Only log successful sends in debug mode with throttling
                 if self.debug_mode:
-                    logging.debug(f"✅ Send successful (HTTP {response.status_code}) [{elapsed_ms:.0f}ms]")
-                    try:
-                        response_data = response.json()
-                        logging.debug(f"API Response: {response_data}")
-                    except json.JSONDecodeError:
-                        logging.debug(f"API Response not valid JSON (Status: {response.status_code})")
-                    except requests.exceptions.JSONDecodeError: # Handle requests lib specific error
-                        logging.debug(f"API Response not valid JSON (Status: {response.status_code})")
-
+                    self._debug_log_throttled(f"✅ Send successful (HTTP {response.status_code}) [{elapsed_ms:.0f}ms]")
+                    # Only parse response occasionally to reduce overhead
+                    if not PERFORMANCE_MODE or (hasattr(self, '_log_counter') and self._log_counter % 20 == 0):
+                        try:
+                            response_data = response.json()
+                            self._debug_log_throttled(f"API Response: {response_data}")
+                        except (json.JSONDecodeError, requests.exceptions.JSONDecodeError):
+                            self._debug_log_throttled(f"API Response not valid JSON (Status: {response.status_code})")
 
                 self.send_retries = 0 # Reset retries on success
                 self.current_send_interval = DEFAULT_SEND_INTERVAL_S # Reset interval
@@ -1279,7 +1334,7 @@ class TelemetryBridge:
                     try:
                         self.datacloud_client.send_telemetry_record(payload)
                         if self.debug_mode:
-                            logging.debug("✅ Data Cloud telemetry sent successfully")
+                            self._debug_log_throttled("✅ Data Cloud telemetry sent successfully")
                     except Exception as e:
                         logging.error(f"❌ Failed to send telemetry to Data Cloud: {e}")
 
@@ -1351,7 +1406,7 @@ class TelemetryBridge:
                  # self.current_send_interval = DEFAULT_SEND_INTERVAL_S
 
     def _print_status_update(self):
-        """Logs a periodic status update."""
+        """Logs a periodic status update with performance metrics."""
         now = time.time()
         elapsed_runtime = now - self.start_time
         packets_per_sec = self.packets_received / elapsed_runtime if elapsed_runtime > 0 else 0
@@ -1363,11 +1418,32 @@ class TelemetryBridge:
         avg_response_time_ms = (total_response_time / total_sent) if total_sent > 0 else 0
         success_rate = (100 * (total_sent - total_failed) / total_sent) if total_sent > 0 else 100
 
+        # Get performance metrics
+        try:
+            process = psutil.Process()
+            cpu_percent = process.cpu_percent()
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / (1024 * 1024)
+            memory_percent = process.memory_percent()
+            num_threads = process.num_threads()
+            
+            # System metrics
+            system_cpu = psutil.cpu_percent()
+            system_memory = psutil.virtual_memory().percent
+            
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            cpu_percent = memory_mb = memory_percent = num_threads = 0
+            system_cpu = system_memory = 0
+
         # Always log status updates with INFO level for useful console output
         logging.info("============ TELEMETRY STATUS UPDATE ============")
         logging.info(f"  Driver: {self.driver_name} | Track: {self.track_name}")
         logging.info(f"  Uptime: {str(datetime.timedelta(seconds=int(elapsed_runtime)))}")
         logging.info(f"  Packets: {self.packets_received} ({packets_per_sec:.1f}/sec)")
+        
+        # Performance metrics
+        logging.info(f"  Process: CPU {cpu_percent:.1f}% | Memory {memory_mb:.0f}MB ({memory_percent:.1f}%) | Threads {num_threads}")
+        logging.info(f"  System:  CPU {system_cpu:.1f}% | Memory {system_memory:.1f}%")
         
         # Current race info (most important data)
         if self.latest_lap_data:
@@ -1422,6 +1498,25 @@ class TelemetryBridge:
         logging.info(f"  Network: {total_sent} sends | {success_rate:.1f}% success | {avg_response_time_ms:.0f}ms latency")
         logging.info("================================================")
     
+    def _debug_log_throttled(self, message: str, force: bool = False):
+        """Log debug messages with throttling to reduce overhead"""
+        if not PERFORMANCE_MODE or force:
+            logging.debug(message)
+            return
+            
+        current_time = time.time()
+        
+        # Only log if enough time has passed or if this is a critical message
+        if (current_time - self._last_debug_log) >= LOG_THROTTLE_INTERVAL:
+            logging.debug(f"[Throttled Logs] {message}")
+            self._last_debug_log = current_time
+            self._log_counter = 0
+        else:
+            self._log_counter += 1
+            # Show a count every 100 throttled messages
+            if self._log_counter % 100 == 0:
+                logging.debug(f"[{self._log_counter} debug messages throttled]")
+
     def _get_position_suffix(self, position):
         """Returns the correct ordinal suffix for a position."""
         if position % 10 == 1 and position != 11:
@@ -1586,8 +1681,9 @@ class TelemetryBridge:
                     self.executor.submit(self._send_payload, self.latest_header)
                     self.last_send_time = now # Update last send time *after* submitting
 
-                # 4. Periodic Status Update
-                if now - self.last_status_update_time >= STATUS_UPDATE_INTERVAL_S:
+                # 4. Periodic Status Update (optimized interval)
+                status_interval = STATUS_LOG_INTERVAL if PERFORMANCE_MODE else STATUS_UPDATE_INTERVAL_S
+                if now - self.last_status_update_time >= status_interval:
                     self._print_status_update()
                     self.last_status_update_time = now
 
