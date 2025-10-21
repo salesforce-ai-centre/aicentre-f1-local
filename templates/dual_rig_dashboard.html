@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual-Rig F1 Telemetry Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dual-rig-style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <h1>🏎️ Dual-Rig F1 25 Telemetry</h1>
+            <div class="connection-status">
+                <span class="status-indicator" id="connectionStatus"></span>
+                <span id="connectionText">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Main Content: Split View -->
+        <div class="split-view">
+            <!-- Sim Rig 1 Panel -->
+            <div class="rig-panel" id="rigAPanel">
+                <div class="rig-header rig-a-header">
+                    <h2>🔴 Sim Rig 1</h2>
+                    <div class="rig-status" id="rigAStatus">Waiting for data...</div>
+                    <div class="driver-name" id="rigADriver">{{ rigs[0].driver_name }}</div>
+                    <div class="session-details">
+                        <span class="track-name" id="rigA-trackName">--</span> •
+                        <span class="session-type" id="rigA-sessionType">--</span>
+                    </div>
+                </div>
+
+                <div class="telemetry-grid">
+                    <!-- Speed & Gear Row -->
+                    <div class="metric-card speed-card">
+                        <h3>Speed</h3>
+                        <div class="metric-value large" id="rigA-speed">0</div>
+                        <div class="metric-unit">km/h</div>
+                    </div>
+
+                    <div class="metric-card gear-card">
+                        <h3>Gear</h3>
+                        <div class="metric-value gear" id="rigA-gear">N</div>
+                    </div>
+
+                    <!-- RPM -->
+                    <div class="metric-card rpm-card">
+                        <h3>RPM</h3>
+                        <div class="metric-value large" id="rigA-rpm">0</div>
+                        <div class="rpm-bar-container">
+                            <div class="rpm-bar" id="rigA-rpmBar"></div>
+                        </div>
+                    </div>
+
+                    <!-- Throttle/Brake/Steering -->
+                    <div class="metric-card inputs-card">
+                        <h3>Inputs</h3>
+                        <div class="input-bars">
+                            <div class="input-row">
+                                <label>Throttle</label>
+                                <div class="bar-container">
+                                    <div class="bar throttle-bar" id="rigA-throttleBar"></div>
+                                </div>
+                                <span class="input-value" id="rigA-throttle">0%</span>
+                            </div>
+                            <div class="input-row">
+                                <label>Brake</label>
+                                <div class="bar-container">
+                                    <div class="bar brake-bar" id="rigA-brakeBar"></div>
+                                </div>
+                                <span class="input-value" id="rigA-brake">0%</span>
+                            </div>
+                            <div class="input-row">
+                                <label>Steering</label>
+                                <div class="steering-container">
+                                    <span class="steering-label">L</span>
+                                    <div class="steering-bar-container">
+                                        <div class="steering-center-line"></div>
+                                        <div class="steering-bar" id="rigA-steeringBar"></div>
+                                    </div>
+                                    <span class="steering-label">R</span>
+                                </div>
+                                <span class="input-value" id="rigA-steer">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tyre Temps -->
+                    <div class="metric-card tyre-card">
+                        <h3>Tyre Temps (°C)</h3>
+                        <div class="tyres">
+                            <div class="tyre-row">
+                                <div class="tyre" id="rigA-tyreFL">
+                                    <span class="tyre-label">FL</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                                <div class="tyre" id="rigA-tyreFR">
+                                    <span class="tyre-label">FR</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                            </div>
+                            <div class="tyre-row">
+                                <div class="tyre" id="rigA-tyreRL">
+                                    <span class="tyre-label">RL</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                                <div class="tyre" id="rigA-tyreRR">
+                                    <span class="tyre-label">RR</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Position & Lap -->
+                    <div class="metric-card position-card">
+                        <h3>Position</h3>
+                        <div class="metric-value position" id="rigA-position">--</div>
+                    </div>
+
+                    <div class="metric-card laptime-card">
+                        <h3>Current Lap</h3>
+                        <div class="lap-info">
+                            <div class="lap-number">Lap <span id="rigA-lapNum">--</span></div>
+                            <div class="lap-time" id="rigA-currentLap">--:--.---</div>
+                        </div>
+                    </div>
+
+                    <div class="metric-card lastlap-card">
+                        <h3>Last Lap</h3>
+                        <div class="metric-value lap-time" id="rigA-lastLap">--:--.---</div>
+                    </div>
+
+                    <!-- Session Info -->
+                    <div class="metric-card session-card">
+                        <h3>Session</h3>
+                        <div class="session-info">
+                            <div class="session-id">ID: <span id="rigA-sessionId">--</span></div>
+                            <div class="frame-count">Frame: <span id="rigA-frame">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sim Rig 2 Panel (same structure) -->
+            <div class="rig-panel" id="rigBPanel">
+                <div class="rig-header rig-b-header">
+                    <h2>🔵 Sim Rig 2</h2>
+                    <div class="rig-status" id="rigBStatus">Waiting for data...</div>
+                    <div class="driver-name" id="rigBDriver">{{ rigs[1].driver_name }}</div>
+                    <div class="session-details">
+                        <span class="track-name" id="rigB-trackName">--</span> •
+                        <span class="session-type" id="rigB-sessionType">--</span>
+                    </div>
+                </div>
+
+                <div class="telemetry-grid">
+                    <!-- Speed & Gear Row -->
+                    <div class="metric-card speed-card">
+                        <h3>Speed</h3>
+                        <div class="metric-value large" id="rigB-speed">0</div>
+                        <div class="metric-unit">km/h</div>
+                    </div>
+
+                    <div class="metric-card gear-card">
+                        <h3>Gear</h3>
+                        <div class="metric-value gear" id="rigB-gear">N</div>
+                    </div>
+
+                    <!-- RPM -->
+                    <div class="metric-card rpm-card">
+                        <h3>RPM</h3>
+                        <div class="metric-value large" id="rigB-rpm">0</div>
+                        <div class="rpm-bar-container">
+                            <div class="rpm-bar" id="rigB-rpmBar"></div>
+                        </div>
+                    </div>
+
+                    <!-- Throttle/Brake/Steering -->
+                    <div class="metric-card inputs-card">
+                        <h3>Inputs</h3>
+                        <div class="input-bars">
+                            <div class="input-row">
+                                <label>Throttle</label>
+                                <div class="bar-container">
+                                    <div class="bar throttle-bar" id="rigB-throttleBar"></div>
+                                </div>
+                                <span class="input-value" id="rigB-throttle">0%</span>
+                            </div>
+                            <div class="input-row">
+                                <label>Brake</label>
+                                <div class="bar-container">
+                                    <div class="bar brake-bar" id="rigB-brakeBar"></div>
+                                </div>
+                                <span class="input-value" id="rigB-brake">0%</span>
+                            </div>
+                            <div class="input-row">
+                                <label>Steering</label>
+                                <div class="steering-container">
+                                    <span class="steering-label">L</span>
+                                    <div class="steering-bar-container">
+                                        <div class="steering-center-line"></div>
+                                        <div class="steering-bar" id="rigB-steeringBar"></div>
+                                    </div>
+                                    <span class="steering-label">R</span>
+                                </div>
+                                <span class="input-value" id="rigB-steer">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tyre Temps -->
+                    <div class="metric-card tyre-card">
+                        <h3>Tyre Temps (°C)</h3>
+                        <div class="tyres">
+                            <div class="tyre-row">
+                                <div class="tyre" id="rigB-tyreFL">
+                                    <span class="tyre-label">FL</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                                <div class="tyre" id="rigB-tyreFR">
+                                    <span class="tyre-label">FR</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                            </div>
+                            <div class="tyre-row">
+                                <div class="tyre" id="rigB-tyreRL">
+                                    <span class="tyre-label">RL</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                                <div class="tyre" id="rigB-tyreRR">
+                                    <span class="tyre-label">RR</span>
+                                    <span class="tyre-temp">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Position & Lap -->
+                    <div class="metric-card position-card">
+                        <h3>Position</h3>
+                        <div class="metric-value position" id="rigB-position">--</div>
+                    </div>
+
+                    <div class="metric-card laptime-card">
+                        <h3>Current Lap</h3>
+                        <div class="lap-info">
+                            <div class="lap-number">Lap <span id="rigB-lapNum">--</span></div>
+                            <div class="lap-time" id="rigB-currentLap">--:--.---</div>
+                        </div>
+                    </div>
+
+                    <div class="metric-card lastlap-card">
+                        <h3>Last Lap</h3>
+                        <div class="metric-value lap-time" id="rigB-lastLap">--:--.---</div>
+                    </div>
+
+                    <!-- Session Info -->
+                    <div class="metric-card session-card">
+                        <h3>Session</h3>
+                        <div class="session-info">
+                            <div class="session-id">ID: <span id="rigB-sessionId">--</span></div>
+                            <div class="frame-count">Frame: <span id="rigB-frame">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dual-rig-dashboard.js') }}"></script>
+</body>
+</html>

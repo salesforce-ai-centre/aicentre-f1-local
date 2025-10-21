@@ -1,0 +1,464 @@
+/* Dual-Rig F1 Telemetry Dashboard Styles */
+
+:root[data-theme="dark"] {
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #141824;
+    --bg-card: #1a1f2e;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --border-color: #2a2f3e;
+
+    --rig-a-color: #e63946;  /* Sim Rig 1 */
+    --rig-b-color: #0077b6;  /* Sim Rig 2 */
+
+    --throttle-color: #2ecc71;
+    --brake-color: #e74c3c;
+    --rpm-color: #f39c12;
+
+    --tyre-cold: #3498db;
+    --tyre-optimal: #2ecc71;
+    --tyre-hot: #e74c3c;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+}
+
+.dashboard-container {
+    max-width: 100vw;
+    margin: 0 auto;
+}
+
+/* Header */
+.dashboard-header {
+    background: var(--bg-secondary);
+    padding: 1rem 2rem;
+    border-bottom: 2px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dashboard-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #95a5a6;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.connected {
+    background: #2ecc71;
+}
+
+.status-indicator.disconnected {
+    background: #e74c3c;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Split View */
+.split-view {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    height: calc(100vh - 80px);
+}
+
+/* Rig Panels */
+.rig-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.rig-header {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.rig-a-header {
+    background: linear-gradient(135deg, var(--rig-a-color) 0%, rgba(230, 57, 70, 0.3) 100%);
+    border: 2px solid var(--rig-a-color);
+}
+
+.rig-b-header {
+    background: linear-gradient(135deg, var(--rig-b-color) 0%, rgba(0, 119, 182, 0.3) 100%);
+    border: 2px solid var(--rig-b-color);
+}
+
+.rig-header h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.rig-status {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.driver-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+.session-details {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.track-name, .session-type {
+    font-weight: 500;
+}
+
+/* Telemetry Grid */
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.metric-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.metric-card h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.metric-value.large {
+    font-size: 2.5rem;
+}
+
+.metric-value.gear {
+    font-size: 3rem;
+    color: var(--throttle-color);
+}
+
+.metric-value.position {
+    font-size: 3rem;
+    color: var(--rpm-color);
+}
+
+.metric-unit {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* Speed Card */
+.speed-card {
+    grid-column: span 1;
+}
+
+/* Gear Card */
+.gear-card {
+    grid-column: span 1;
+}
+
+/* RPM Card */
+.rpm-card {
+    grid-column: span 1;
+}
+
+.rpm-bar-container {
+    margin-top: 0.5rem;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.rpm-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--throttle-color), var(--rpm-color), var(--brake-color));
+    width: 0%;
+    transition: width 0.1s ease;
+}
+
+/* Inputs Card */
+.inputs-card {
+    grid-column: span 2;
+}
+
+.input-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.input-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 60px;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.input-row label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.bar-container {
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.bar {
+    height: 100%;
+    width: 0%;
+    transition: width 0.05s ease;
+}
+
+.throttle-bar {
+    background: var(--throttle-color);
+}
+
+.brake-bar {
+    background: var(--brake-color);
+}
+
+.input-value {
+    text-align: right;
+    font-weight: 600;
+}
+
+/* Steering Container */
+.steering-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.steering-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    width: 20px;
+    text-align: center;
+}
+
+.steering-bar-container {
+    flex: 1;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    position: relative;
+    overflow: visible;
+}
+
+.steering-center-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateX(-50%);
+}
+
+.steering-bar {
+    position: absolute;
+    height: 100%;
+    width: 50%;
+    background: linear-gradient(90deg, #3498db, #9b59b6);
+    transition: left 0.05s ease, transform 0.05s ease;
+    border-radius: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Tyre Card */
+.tyre-card {
+    grid-column: span 2;
+}
+
+.tyres {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tyre-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.tyre {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.tyre-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tyre-temp {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.tyre.cold {
+    border-color: var(--tyre-cold);
+    background: rgba(52, 152, 219, 0.2);
+}
+
+.tyre.optimal {
+    border-color: var(--tyre-optimal);
+    background: rgba(46, 204, 113, 0.2);
+}
+
+.tyre.hot {
+    border-color: var(--tyre-hot);
+    background: rgba(231, 76, 60, 0.2);
+}
+
+/* Position Card */
+.position-card {
+    grid-column: span 1;
+}
+
+/* Lap Time Cards */
+.laptime-card {
+    grid-column: span 1;
+}
+
+.lap-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.lap-number {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.lap-time {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+.lastlap-card {
+    grid-column: span 1;
+}
+
+.lastlap-card .lap-time {
+    text-align: center;
+}
+
+/* Session Card */
+.session-card {
+    grid-column: span 3;
+}
+
+.session-info {
+    display: flex;
+    justify-content: space-around;
+    font-size: 0.9rem;
+}
+
+.session-id, .frame-count {
+    color: var(--text-secondary);
+}
+
+.session-id span, .frame-count span {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-left: 0.25rem;
+}
+
+/* Responsive */
+@media (max-width: 1400px) {
+    .split-view {
+        grid-template-columns: 1fr;
+    }
+
+    .rig-panel {
+        height: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .telemetry-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metric-card {
+        grid-column: span 1 !important;
+    }
+}
+
+/* Scrollbar */
+.rig-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.rig-panel::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.rig-panel::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.rig-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}

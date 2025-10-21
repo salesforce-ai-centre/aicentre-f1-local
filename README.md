@@ -12,12 +12,7 @@ A real-time Formula 1 telemetry dashboard that captures and displays live data f
 - Event notifications (completed laps, flags, etc.)
 - **Automatic track detection** from F1 game data
 - **AI Race Engineer** that provides contextual coaching via Salesforce AI Models API
-
-## Requirements
-
-- F1 24 game with UDP telemetry enabled
-- Python 3.x
-- Web browser (Chrome, Firefox, etc.)
+- **Salesforce Data Cloud integration** for telemetry streaming
 
 ## Quick Start
 
@@ -26,174 +21,81 @@ A real-time Formula 1 telemetry dashboard that captures and displays live data f
 Run both the dashboard server and telemetry receiver with a single command:
 
 ```bash
-python3 run_dashboard.py --driver "Jacob Berry" --datacloud
+python3 scripts/run_dashboard.py --driver "Your Name" --datacloud
 ```
 
-Your web browser will automatically open with the dashboard, and the system will be ready to receive telemetry from the F1 game. The track name will be automatically detected from the game data.
+Your web browser will automatically open with the dashboard, and the system will be ready to receive telemetry from the F1 game.
 
-### Salesforce Data Cloud Integration
+### Requirements
 
-To stream telemetry data to Salesforce Data Cloud:
+- F1 24 game with UDP telemetry enabled
+- Python 3.x
+- Web browser (Chrome, Firefox, etc.)
 
-1. **Setup environment**: Copy `.env.example` to `.env` and configure your Salesforce credentials
-2. **Generate RSA keys**: Run the key generation script or use existing keys
-3. **Configure Connected App**: Upload certificate and configure JWT Bearer Flow
-4. **Run with Data Cloud**: Use the `--datacloud` flag
+## Installation
 
-```bash
-python3 run_dashboard.py --driver "Your Name" --datacloud
+1. Install dependencies:
+   ```bash
+   pip install -r config/requirements.txt
+   ```
+
+2. Configure environment (optional, for Data Cloud/AI features):
+   ```bash
+   cp config/.env.example .env
+   # Edit .env with your Salesforce credentials
+   ```
+
+3. Configure F1 game:
+   - Navigate to Settings → Telemetry Settings
+   - Enable UDP Telemetry
+   - Set UDP Port to 20777 (default)
+   - Set UDP Format to F1 2024
+
+## Project Structure
+
+```
+├── config/              # Configuration files (.env, requirements.txt, etc.)
+├── docs/                # Documentation
+├── scripts/             # Utility scripts (setup, run_dashboard, performance testing)
+├── src/                 # Main application code
+│   ├── app.py          # Flask web server
+│   ├── receiver.py     # UDP telemetry receiver
+│   └── datacloud_integration.py  # Salesforce Data Cloud integration
+├── static/              # Frontend assets (CSS, JS, images)
+├── templates/           # HTML templates
+├── tests/               # Test files and performance monitoring
+└── logs/                # Runtime logs
 ```
 
-### Command-line Options
+## Documentation
+
+- [Complete Setup Guide](docs/README.md) - Detailed setup instructions including Salesforce integration
+- [Performance Testing](docs/PERFORMANCE_TESTING.md) - Load testing and performance monitoring
+- [F1 UDP Specification](docs/UDPSPEC.md) - F1 24 telemetry data format
+- [AI Models Documentation](docs/models.md) - Salesforce Models API details
+
+## Usage Options
+
+### Command-line Arguments
 
 ```
-usage: run_dashboard.py [-h] [--driver DRIVER] [--track TRACK] [--no-auto-track] [--port PORT] [--no-browser] [--debug]
-
-Start F1 Dashboard components with a single command
+usage: run_dashboard.py [-h] [--driver DRIVER] [--track TRACK] [--no-auto-track]
+                        [--port PORT] [--no-browser] [--debug] [--datacloud]
 
 options:
-  -h, --help         show this help message and exit
-  --driver DRIVER    Driver name to display on dashboard
-  --track TRACK      Track name to display on dashboard (will be auto-detected from game data)
-  --no-auto-track    Disable automatic track detection from game data
-  --port PORT        Port for the web server (default: 8080)
-  --no-browser       Don't automatically open web browser
-  --debug            Enable debug mode for more verbose logging
+  --driver DRIVER      Driver name to display on dashboard
+  --track TRACK        Track name (auto-detected by default)
+  --no-auto-track      Disable automatic track detection
+  --port PORT          Web server port (default: 8080)
+  --no-browser         Don't automatically open browser
+  --debug              Enable debug logging
+  --datacloud          Enable Salesforce Data Cloud streaming
 ```
 
-## Track Auto-Detection
+## Contributing
 
-The dashboard automatically detects the current track from the F1 game's telemetry data. This eliminates the need to manually specify the track name when starting the dashboard.
+This is a personal project for F1 telemetry visualization and AI-powered race coaching.
 
-**Supported tracks** (from F1 24 UDP specification):
-- Melbourne, Paul Ricard, Shanghai, Sakhir (Bahrain), Catalunya
-- Monaco, Montreal, Silverstone, Hockenheim, Hungaroring
-- Spa, Monza, Singapore, Suzuka, Abu Dhabi
-- Texas, Brazil, Austria, Sochi, Mexico
-- Baku (Azerbaijan), Zandvoort, Imola, Portimão
-- Jeddah, Miami, Las Vegas, Losail
-- And short variants of various tracks
+## License
 
-If auto-detection fails or you prefer to set a fixed track name, use the `--no-auto-track` flag:
-
-```bash
-python3 run_dashboard.py --driver "Your Name" --track "Silverstone" --no-auto-track
-```
-
-## F1 Game Settings
-
-1. In F1 24, navigate to Settings → Telemetry Settings
-2. Enable UDP Telemetry
-3. Set UDP Port to 20777 (default)
-4. Set UDP Format to F1 2024
-5. Set UDP Broadcast Mode according to your network setup
-
-## Manual Setup (Component-by-Component)
-
-If you prefer to start components individually:
-
-### Dashboard Server
-
-```bash
-flask run --debug
-```
-
-Or for production:
-
-```bash
-python app.py
-```
-
-### Telemetry Receiver
-
-```bash
-python receiver.py --url http://localhost:5000/data --driver "YourName" --track "Circuit"
-```
-
-## Architecture
-
-- **app.py**: Flask web server that hosts the dashboard interface and broadcasts telemetry data
-- **receiver.py**: Listens for UDP packets from the F1 game, processes the data, and sends it to the server
-- **templates/index.html**: Main dashboard HTML structure
-- **static/js/script.js**: JavaScript code for real-time dashboard updates
-- **static/css/style.css**: Dashboard styling
-
-## AI Race Engineer Setup
-
-The dashboard includes an AI race engineer that provides contextual coaching using the Salesforce Models API with OpenAI's GPT-4o model (GPT-4 Omni) for advanced natural language understanding and instruction following.
-
-### Configuration
-
-1. Copy the `.env.example` file to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Configure your Salesforce Connected App and Models API credentials:
-
-### Data Cloud Integration Setup
-
-If you want to stream F1 telemetry data to Salesforce Data Cloud:
-
-1. **Generate RSA Key Pair for JWT Authentication:**
-   ```bash
-   python3 generate_keys.py
-   ```
-   This creates `private.key` and `public.key` files.
-
-2. **Configure Connected App for Data Cloud:**
-   - In Salesforce Setup → Apps → App Manager → Edit your Connected App
-   - Check "Use digital signatures"
-   - Upload the `public.key` file or paste its contents
-   - Ensure OAuth scopes include "Access Data Cloud APIs (cdp_api)"
-   - Save the Connected App
-
-3. **Update your `.env` file:**
-   ```
-   # Data Cloud Integration
-   DATACLOUD_ENABLED=true
-   SALESFORCE_DOMAIN=your-org.my.salesforce.com
-   SF_PRIVATE_KEY_PATH=./private.key
-   SF_USERNAME=your-salesforce-username@domain.com
-   ```
-
-#### Salesforce Models API Setup
-
-1. Configure a Connected App in your Salesforce org:
-   - In Salesforce Setup, go to Apps → App Manager → New Connected App
-   - Fill in the basic information:
-     - Connected App Name: F1 Dashboard
-     - API Name: F1_Dashboard
-     - Contact Email: Your email
-
-   - Enable OAuth Settings:
-     - Check "Enable OAuth Settings"
-     - Callback URL: http://localhost:5000/callback (not actually used, but required)
-     - Selected OAuth Scopes: Add "Access and manage your data (api)" 
-
-   - Save the Connected App
-
-2. Add credentials to your `.env` file:
-   ```
-   SF_CLIENT_ID=your_client_id_here
-   SF_CLIENT_SECRET=your_client_secret_here
-   ```
-
-3. For the Models API, ensure you have Einstein Platform access configured in your Salesforce org.
-
-### How it Works
-
-The AI race engineer:
-- Analyzes telemetry data in real-time
-- Detects important events (completed laps, damage, high tire wear, etc.)
-- Sends prompts to the Salesforce Models API with context about the race situation
-- Receives AI-generated coaching messages customized to your driving
-- Delivers these messages through team radio sound effects and text-to-speech
-
-Messages are triggered by:
-- Completing a lap (with performance feedback)
-- Sustaining significant damage
-- High tire wear detection
-- DRS availability
-- Race strategy considerations based on position
-- And more!
+[Add your license here]

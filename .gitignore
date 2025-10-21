@@ -54,3 +54,7 @@ venv.bak/
 # Misc
 *.log
 .cache/
+
+# Logs
+logs/*.jsonl
+logs/*.json
