@@ -8,6 +8,13 @@ const TIRE_INDEX_RR = 1;
 const TIRE_INDEX_FL = 2;
 const TIRE_INDEX_FR = 3;
 
+// Initialize track map
+let trackMap = null;
+document.addEventListener('DOMContentLoaded', () => {
+    trackMap = new TrackMap('trackMapCanvas');
+    console.log('Track map initialized');
+});
+
 // Tire temperature thresholds
 const TIRE_TEMP_MIN = 80;
 const TIRE_TEMP_MAX = 105;
@@ -94,6 +101,30 @@ function updateRigDisplay(rigId, data) {
 
     if (data.sessionTypeName) {
         updateElement(`${prefix}-sessionType`, data.sessionTypeName);
+    }
+
+    // Track map handling - load track when session packet received
+    if (data.trackId !== undefined && trackMap) {
+        if (trackMap.trackId !== data.trackId) {
+            console.log(`Loading track: ${data.trackName} (ID: ${data.trackId})`);
+            trackMap.loadTrack(data.trackId).then(success => {
+                if (success) {
+                    updateElement('trackMapName', data.trackName || 'Unknown Track');
+
+                    // Set marshal zones if available
+                    if (data.marshalZones && data.trackLength) {
+                        trackMap.setMarshalZones(data.marshalZones, data.trackLength);
+                    }
+                }
+            });
+        }
+    }
+
+    // Update car position on track map (from motion packet)
+    if (data.worldPositionX !== undefined && data.worldPositionZ !== undefined && trackMap) {
+        const driverName = rigId === 'RIG_A' ? 'Sim Rig 1' : 'Sim Rig 2';
+        trackMap.updateCarPosition(rigId, data.worldPositionX, data.worldPositionZ, driverName);
+        trackMap.render();
     }
 
     // Telemetry data (packet ID 6)

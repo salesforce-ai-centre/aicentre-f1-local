@@ -18,9 +18,9 @@
             </div>
         </header>
 
-        <!-- Main Content: Split View -->
+        <!-- Main Content: Three Column Layout -->
         <div class="split-view">
-            <!-- Sim Rig 1 Panel -->
+            <!-- LEFT: Sim Rig 1 Panel -->
             <div class="rig-panel" id="rigAPanel">
                 <div class="rig-header rig-a-header">
                     <h2>🔴 Sim Rig 1</h2>
@@ -144,7 +144,20 @@
                 </div>
             </div>
 
-            <!-- Sim Rig 2 Panel (same structure) -->
+            <!-- CENTER: Track Map -->
+            <div class="track-map-panel">
+                <div class="track-map-header">
+                    <h2>🗺️ Track Map</h2>
+                    <div class="track-map-info">
+                        <span id="trackMapName">Waiting for track data...</span>
+                    </div>
+                </div>
+                <div class="track-map-container">
+                    <canvas id="trackMapCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- RIGHT: Sim Rig 2 Panel -->
             <div class="rig-panel" id="rigBPanel">
                 <div class="rig-header rig-b-header">
                     <h2>🔵 Sim Rig 2</h2>
@@ -270,6 +283,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='js/track-map.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dual-rig-dashboard.js') }}"></script>
 </body>
 </html>

@@ -31,6 +31,7 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     overflow-x: hidden;
+    font-size: 18px;  /* Larger base font for 4K TV */
 }
 
 .dashboard-container {
@@ -49,7 +50,7 @@ body {
 }
 
 .dashboard-header h1 {
-    font-size: 1.8rem;
+    font-size: 2.2rem;  /* Larger for 4K TV */
     font-weight: 700;
 }
 
@@ -80,13 +81,15 @@ body {
     50% { opacity: 0.5; }
 }
 
-/* Split View */
+/* Three Column Layout: Sim 1 | Map | Sim 2 */
 .split-view {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1.2fr 1fr;  /* Left rig, Map (slightly wider), Right rig */
     gap: 1rem;
     padding: 1rem;
     height: calc(100vh - 80px);
+    max-width: 3840px;  /* 4K width */
+    margin: 0 auto;
 }
 
 /* Rig Panels */
@@ -116,24 +119,24 @@ body {
 }
 
 .rig-header h2 {
-    font-size: 1.5rem;
+    font-size: 1.8rem;  /* Larger for 4K TV */
     margin-bottom: 0.5rem;
 }
 
 .rig-status {
-    font-size: 0.9rem;
+    font-size: 1.1rem;  /* Larger for 4K TV */
     color: var(--text-secondary);
     margin-top: 0.5rem;
 }
 
 .driver-name {
-    font-size: 1.1rem;
+    font-size: 1.3rem;  /* Larger for 4K TV */
     font-weight: 600;
     margin-top: 0.25rem;
 }
 
 .session-details {
-    font-size: 0.85rem;
+    font-size: 1rem;  /* Larger for 4K TV */
     color: var(--text-secondary);
     margin-top: 0.5rem;
 }
@@ -157,24 +160,24 @@ body {
 }
 
 .metric-card h3 {
-    font-size: 0.85rem;
+    font-size: 1.1rem;  /* Larger for 4K TV */
     text-transform: uppercase;
     color: var(--text-secondary);
     margin-bottom: 0.5rem;
 }
 
 .metric-value {
-    font-size: 2rem;
+    font-size: 2.2rem;  /* Larger for 4K TV */
     font-weight: 700;
     text-align: center;
 }
 
 .metric-value.large {
-    font-size: 2.5rem;
+    font-size: 4rem;  /* Extra large for 4K TV - Speed & RPM */
 }
 
 .metric-value.gear {
-    font-size: 3rem;
+    font-size: 3.5rem;  /* Larger for 4K TV */
     color: var(--throttle-color);
 }
 
@@ -425,25 +428,8 @@ body {
 }
 
 /* Responsive */
-@media (max-width: 1400px) {
-    .split-view {
-        grid-template-columns: 1fr;
-    }
-
-    .rig-panel {
-        height: auto;
-    }
-}
-
-@media (max-width: 768px) {
-    .telemetry-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .metric-card {
-        grid-column: span 1 !important;
-    }
-}
+/* Optimized for 4K TV (3840x2160) - Keep 3-column layout */
+/* No responsive breakpoints - designed for large screen only */
 
 /* Scrollbar */
 .rig-panel::-webkit-scrollbar {
@@ -461,4 +447,50 @@ body {
 
 .rig-panel::-webkit-scrollbar-thumb:hover {
     background: var(--text-secondary);
+}
+
+/* Track Map Panel (Center Column) */
+.track-map-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    padding: 1rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.track-map-header {
+    text-align: center;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #2a2f3e 0%, rgba(42, 47, 62, 0.5) 100%);
+    border: 2px solid var(--border-color);
+}
+
+.track-map-header h2 {
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.track-map-info {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.track-map-container {
+    flex: 1;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    position: relative;
+    min-height: 0;  /* Allow flex shrink */
+}
+
+#trackMapCanvas {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
 }

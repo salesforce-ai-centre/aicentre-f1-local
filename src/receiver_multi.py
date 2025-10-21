@@ -18,6 +18,24 @@ from receiver import (
 
 logger = logging.getLogger(__name__)
 
+# Simple motion data parsing for world positions
+def parse_motion_packet(payload: bytes, player_index: int):
+    """
+    Parse motion packet to extract world position for player
+    Motion data format (60 bytes per car):
+    - worldPositionX (float, 4 bytes)
+    - worldPositionY (float, 4 bytes)
+    - worldPositionZ (float, 4 bytes)
+    - ...more fields we don't need...
+    """
+    MOTION_DATA_SIZE = 60
+    offset = player_index * MOTION_DATA_SIZE
+
+    if offset + 12 <= len(payload):
+        world_x, world_y, world_z = struct.unpack('<fff', payload[offset:offset+12])
+        return {'worldPositionX': world_x, 'worldPositionZ': world_z}
+    return None
+
 # F1 Track ID to Name mapping
 TRACK_NAMES = {
     0: "Melbourne", 1: "Paul Ricard", 2: "Shanghai", 3: "Sakhir (Bahrain)",
@@ -125,7 +143,9 @@ class F1TelemetryReceiverMulti:
         payload = data[PacketHeader.SIZE:]
 
         try:
-            if packet_id == PACKET_ID_LAP_DATA:
+            if packet_id == PACKET_ID_MOTION:
+                self._handle_motion(header, payload)
+            elif packet_id == PACKET_ID_LAP_DATA:
                 self._handle_lap_data(header, payload)
             elif packet_id == PACKET_ID_CAR_TELEMETRY:
                 self._handle_car_telemetry(header, payload)
@@ -137,6 +157,19 @@ class F1TelemetryReceiverMulti:
                 self._handle_session(header, payload)
         except Exception as e:
             logger.debug(f"[{self.rig_id}] Error processing packet {packet_id}: {e}")
+
+    def _handle_motion(self, header: PacketHeader, payload: bytes):
+        """Process motion packet for world position"""
+        player_index = header.m_playerCarIndex
+        motion_data = parse_motion_packet(payload, player_index)
+
+        if motion_data:
+            self._send_callback({
+                'packetId': PACKET_ID_MOTION,
+                'sessionUID': header.m_sessionUID,
+                'worldPositionX': motion_data['worldPositionX'],
+                'worldPositionZ': motion_data['worldPositionZ'],
+            })
 
     def _handle_lap_data(self, header: PacketHeader, payload: bytes):
         """Process lap data packet"""
