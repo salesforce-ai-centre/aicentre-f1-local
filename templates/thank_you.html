@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Started - F1 Racing Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .success-icon {
+            font-size: 120px;
+            margin-bottom: 30px;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        @keyframes scaleIn {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: fadeIn 0.8s ease-out 0.3s both;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message {
+            font-size: 24px;
+            margin-bottom: 40px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+            animation: fadeIn 0.8s ease-out 0.5s both;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            animation: fadeIn 0.8s ease-out 0.7s both;
+        }
+
+        .instructions h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #4ecdc4;
+        }
+
+        .instructions p {
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .instructions .step {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        .instructions .step-number {
+            font-size: 32px;
+            font-weight: bold;
+            margin-right: 15px;
+            color: #ffd700;
+            min-width: 50px;
+        }
+
+        .instructions .step-text {
+            text-align: left;
+            font-size: 16px;
+        }
+
+        .driver-info {
+            background: rgba(102, 126, 234, 0.2);
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .driver-info strong {
+            color: #667eea;
+            font-size: 20px;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+            animation: fadeIn 0.8s ease-out 0.9s both;
+        }
+
+        .racing-flag {
+            font-size: 40px;
+            margin: 20px 0;
+            animation: wave 2s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% {
+                transform: rotate(0deg);
+            }
+            25% {
+                transform: rotate(10deg);
+            }
+            75% {
+                transform: rotate(-10deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✅</div>
+
+        <h1>You're All Set!</h1>
+
+        <p class="message">
+            Your racing session has been created successfully.
+        </p>
+
+        <div class="driver-info" id="driverInfo">
+            <strong>Driver:</strong> <span id="driverName">Loading...</span><br>
+            <strong>Simulator:</strong> <span id="rigName">Loading...</span>
+        </div>
+
+        <div class="instructions">
+            <h2>What happens next?</h2>
+
+            <div class="step">
+                <div class="step-number">1️⃣</div>
+                <div class="step-text">
+                    <strong>Put your phone away</strong><br>
+                    You can close this page now - everything is set up!
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2️⃣</div>
+                <div class="step-text">
+                    <strong>Head to your simulator</strong><br>
+                    The screen will show "GAME START" when you're ready
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3️⃣</div>
+                <div class="step-text">
+                    <strong>Start your F1 game</strong><br>
+                    Live telemetry will appear automatically
+                </div>
+            </div>
+
+            <div class="racing-flag">🏁</div>
+        </div>
+
+        <div class="footer">
+            <p>Good luck on the track!</p>
+        </div>
+    </div>
+
+    <script>
+        // Get session details from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('sessionId');
+        const rigNumber = urlParams.get('rig');
+
+        // Fetch and display session details
+        async function loadSessionDetails() {
+            if (!sessionId) {
+                document.getElementById('driverName').textContent = 'Unknown';
+                document.getElementById('rigName').textContent = rigNumber ? `Rig ${rigNumber}` : 'Unknown';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/session/${sessionId}`);
+                const data = await response.json();
+
+                if (data.success && data.session) {
+                    const session = data.session;
+                    document.getElementById('driverName').textContent = session.Driver_Name__c || 'Unknown';
+
+                    const rigName = session.Rig_Number__c === 1 ? 'Simulator 1 (Left)' : 'Simulator 2 (Right)';
+                    document.getElementById('rigName').textContent = rigName;
+                }
+            } catch (error) {
+                console.error('Failed to load session details:', error);
+                document.getElementById('driverName').textContent = 'Unknown';
+                document.getElementById('rigName').textContent = rigNumber ? `Rig ${rigNumber}` : 'Unknown';
+            }
+        }
+
+        // Load session details on page load
+        loadSessionDetails();
+    </script>
+</body>
+</html>

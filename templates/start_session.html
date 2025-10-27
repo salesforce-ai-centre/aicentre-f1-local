@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Start Your F1 Session</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .rig-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 30px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .race-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .race-info h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .race-detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .race-detail:last-child {
+            border-bottom: none;
+        }
+
+        .race-detail .label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .race-detail .value {
+            color: #333;
+            font-weight: bold;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .checkbox-group {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .safety-rules {
+            background: #fff3cd;
+            border-left: 4px solid #ff6b6b;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .safety-rules h4 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .safety-rules ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .safety-rules li {
+            padding: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .safety-rules li:before {
+            content: "⚠ ";
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .start-button {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .start-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .start-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background: #fee;
+            border-left: 4px solid #f00;
+            padding: 15px;
+            border-radius: 5px;
+            color: #c00;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>F1 Racing Simulator</h1>
+            <div class="rig-badge" id="rigBadge">Rig ? - ?</div>
+        </div>
+
+        <div class="race-info" id="raceInfo" style="display: none;">
+            <h3>Today's Track</h3>
+            <div class="race-detail">
+                <span class="label">Race:</span>
+                <span class="value" id="raceName">Loading...</span>
+            </div>
+            <div class="race-detail">
+                <span class="label">Circuit:</span>
+                <span class="value" id="circuitName">Loading...</span>
+            </div>
+            <div class="race-detail">
+                <span class="label">Location:</span>
+                <span class="value" id="location">Loading...</span>
+            </div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Starting your session...</p>
+        </div>
+
+        <form id="sessionForm">
+            <div class="form-group">
+                <label for="driverName">Your Nickname</label>
+                <input type="text" id="driverName" name="driverName" placeholder="Enter your racing name" required maxlength="50">
+            </div>
+
+            <div class="safety-rules">
+                <h4>Safety Rules</h4>
+                <ul>
+                    <li>Keep hands and feet inside the rig at all times</li>
+                    <li>Do not force the steering wheel or pedals</li>
+                    <li>If you feel unwell, press the emergency stop button</li>
+                    <li>Follow all staff instructions</li>
+                </ul>
+            </div>
+
+            <div class="checkbox-group">
+                <label>
+                    <input type="checkbox" id="safetyAccepted" name="safetyAccepted" required>
+                    I have read and understood the safety rules
+                </label>
+            </div>
+
+            <div class="checkbox-group">
+                <label>
+                    <input type="checkbox" id="termsAccepted" name="termsAccepted" required>
+                    I accept the terms and conditions
+                </label>
+            </div>
+
+            <button type="submit" class="start-button" id="startButton">
+                🏁 Start Racing Session
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Get rig number from URL query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const rigNumber = parseInt(urlParams.get('rig')) || 1;
+        const rigPosition = rigNumber === 1 ? 'Left' : 'Right';
+
+        // Update rig badge
+        document.getElementById('rigBadge').textContent = `Rig ${rigNumber} - ${rigPosition}`;
+
+        // Load calendar data
+        async function loadRaceInfo() {
+            try {
+                const response = await fetch('/api/calendar/current');
+                const data = await response.json();
+
+                if (data.success && data.calendar.loaded) {
+                    const race = data.calendar.currentRace;
+                    document.getElementById('raceName').textContent = race.raceName;
+                    document.getElementById('circuitName').textContent = race.circuit;
+                    document.getElementById('location').textContent = `${race.location}, ${race.country}`;
+                    document.getElementById('raceInfo').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Failed to load race info:', error);
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('sessionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const driverName = document.getElementById('driverName').value.trim();
+            const termsAccepted = document.getElementById('termsAccepted').checked;
+            const safetyAccepted = document.getElementById('safetyAccepted').checked;
+
+            if (!driverName) {
+                showError('Please enter your nickname');
+                return;
+            }
+
+            if (!termsAccepted || !safetyAccepted) {
+                showError('Please accept the terms and safety rules');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('errorMessage').style.display = 'none';
+
+            try {
+                // Create session
+                const response = await fetch('/api/session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rigNumber: rigNumber,
+                        driverName: driverName,
+                        termsAccepted: termsAccepted,
+                        safetyAccepted: safetyAccepted
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Session created, now start it
+                    try {
+                        await fetch(`/api/session/${data.id}/start`, {
+                            method: 'POST'
+                        });
+                    } catch (error) {
+                        console.error('Failed to start session:', error);
+                    }
+
+                    // Redirect to thank you page
+                    window.location.href = `/thank-you?sessionId=${data.id}&rig=${rigNumber}`;
+                } else {
+                    showError(data.error || 'Failed to create session');
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('startButton').disabled = false;
+                }
+            } catch (error) {
+                console.error('Error creating session:', error);
+                showError('Network error. Please try again.');
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('startButton').disabled = false;
+            }
+        });
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // Load race info on page load
+        loadRaceInfo();
+
+        // Focus on driver name input
+        document.getElementById('driverName').focus();
+    </script>
+</body>
+</html>

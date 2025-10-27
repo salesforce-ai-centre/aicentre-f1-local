@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Racing Simulator - Ready to Race</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .current-race {
+            font-size: 24px;
+            color: #ffd700;
+            margin-top: 10px;
+        }
+
+        /* Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: 100%;
+        }
+
+        /* QR Code Sections */
+        .rig-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .rig-section.rig-1 {
+            border-color: rgba(255, 107, 107, 0.5);
+        }
+
+        .rig-section.rig-2 {
+            border-color: rgba(78, 205, 196, 0.5);
+        }
+
+        .rig-section:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .rig-title {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .rig-1 .rig-title {
+            color: #ff6b6b;
+        }
+
+        .rig-2 .rig-title {
+            color: #4ecdc4;
+        }
+
+        .qr-container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .scan-text {
+            font-size: 24px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4ecdc4;
+            margin-right: 10px;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Leaderboard Section */
+        .leaderboard-container {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            margin-top: 20px;
+        }
+
+        .leaderboard-tabs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .tab {
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: translateY(-2px);
+        }
+
+        .leaderboard-content {
+            display: none;
+        }
+
+        .leaderboard-content.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .leaderboard-table th {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            text-align: left;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .leaderboard-table td {
+            padding: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .leaderboard-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .position {
+            font-size: 24px;
+            font-weight: bold;
+            width: 60px;
+        }
+
+        .position-1 { color: #ffd700; }
+        .position-2 { color: #c0c0c0; }
+        .position-3 { color: #cd7f32; }
+
+        .lap-time {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <h1>🏎️ F1 Racing Simulator 🏁</h1>
+            <div class="current-race" id="currentRace">
+                <span class="status-indicator"></span>
+                Loading race calendar...
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <!-- Rig 1 (Left) -->
+            <div class="rig-section rig-1">
+                <div class="rig-title">🏁 RIG 1 - LEFT</div>
+                <div class="qr-container">
+                    <div id="qr-rig1"></div>
+                </div>
+                <div class="scan-text">
+                    Scan to start your session
+                </div>
+            </div>
+
+            <!-- Rig 2 (Right) -->
+            <div class="rig-section rig-2">
+                <div class="rig-title">🏁 RIG 2 - RIGHT</div>
+                <div class="qr-container">
+                    <div id="qr-rig2"></div>
+                </div>
+                <div class="scan-text">
+                    Scan to start your session
+                </div>
+            </div>
+        </div>
+
+        <div class="leaderboard-container">
+            <div class="leaderboard-tabs">
+                <button class="tab active" onclick="showLeaderboard('daily')">🗓️ Today's Best</button>
+                <button class="tab" onclick="showLeaderboard('monthly')">📅 This Month</button>
+                <button class="tab" onclick="showLeaderboard('track')">🏆 Track Records</button>
+            </div>
+
+            <div id="leaderboard-daily" class="leaderboard-content active">
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Pos</th>
+                            <th>Driver</th>
+                            <th>Track</th>
+                            <th>Best Lap</th>
+                            <th>Laps</th>
+                            <th>Rig</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daily-tbody">
+                        <tr><td colspan="6" class="no-data">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="leaderboard-monthly" class="leaderboard-content">
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Pos</th>
+                            <th>Driver</th>
+                            <th>Track</th>
+                            <th>Best Lap</th>
+                            <th>Laps</th>
+                            <th>Rig</th>
+                        </tr>
+                    </thead>
+                    <tbody id="monthly-tbody">
+                        <tr><td colspan="6" class="no-data">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="leaderboard-track" class="leaderboard-content">
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Pos</th>
+                            <th>Driver</th>
+                            <th>Best Lap</th>
+                            <th>Laps</th>
+                            <th>Date</th>
+                            <th>Rig</th>
+                        </tr>
+                    </thead>
+                    <tbody id="track-tbody">
+                        <tr><td colspan="6" class="no-data">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTrack = null;
+
+        // Generate QR codes
+        function generateQRCodes() {
+            const baseUrl = window.location.origin;
+
+            new QRCode(document.getElementById("qr-rig1"), {
+                text: `${baseUrl}/start?rig=1`,
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff"
+            });
+
+            new QRCode(document.getElementById("qr-rig2"), {
+                text: `${baseUrl}/start?rig=2`,
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff"
+            });
+        }
+
+        // Load race calendar
+        async function loadRaceCalendar() {
+            try {
+                const response = await fetch('/api/calendar/current');
+                const data = await response.json();
+
+                if (data.success && data.calendar.loaded) {
+                    const race = data.calendar.currentRace;
+                    currentTrack = race.location;
+
+                    document.getElementById('currentRace').innerHTML = `
+                        <span class="status-indicator"></span>
+                        ${race.raceName} - ${race.location}, ${race.country}
+                    `;
+
+                    // Load track-specific leaderboard
+                    loadLeaderboard('track', currentTrack);
+                }
+            } catch (error) {
+                console.error('Failed to load race calendar:', error);
+            }
+        }
+
+        // Load leaderboard
+        async function loadLeaderboard(period, track = null) {
+            try {
+                let url = `/api/leaderboard/${period}?limit=10`;
+                if (track && period === 'track') {
+                    url += `&track=${encodeURIComponent(track)}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayLeaderboard(period, data.records);
+                }
+            } catch (error) {
+                console.error(`Failed to load ${period} leaderboard:`, error);
+            }
+        }
+
+        // Display leaderboard data
+        function displayLeaderboard(period, records) {
+            const tbody = document.getElementById(`${period}-tbody`);
+
+            if (!records || records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No races yet. Be the first!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = records.map((record, index) => {
+                const position = index + 1;
+                const lapTime = formatLapTime(record.Best_Lap_Time__c);
+                const positionClass = position <= 3 ? `position-${position}` : '';
+                const date = record.Session_Start_Time__c ?
+                    new Date(record.Session_Start_Time__c).toLocaleDateString() : '-';
+
+                if (period === 'track') {
+                    return `
+                        <tr>
+                            <td class="position ${positionClass}">${position}</td>
+                            <td>${escapeHtml(record.Driver_Name__c)}</td>
+                            <td class="lap-time">${lapTime}</td>
+                            <td>${record.Total_Laps__c || 0}</td>
+                            <td>${date}</td>
+                            <td>Rig ${record.Rig_Number__c}</td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td class="position ${positionClass}">${position}</td>
+                            <td>${escapeHtml(record.Driver_Name__c)}</td>
+                            <td>${record.Track_Name__c || '-'}</td>
+                            <td class="lap-time">${lapTime}</td>
+                            <td>${record.Total_Laps__c || 0}</td>
+                            <td>Rig ${record.Rig_Number__c}</td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+        }
+
+        // Show leaderboard tab
+        function showLeaderboard(period) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.leaderboard-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`leaderboard-${period}`).classList.add('active');
+
+            // Load data if needed
+            if (period === 'track' && currentTrack) {
+                loadLeaderboard('track', currentTrack);
+            } else if (period !== 'track') {
+                loadLeaderboard(period);
+            }
+        }
+
+        // Format lap time
+        function formatLapTime(milliseconds) {
+            if (!milliseconds) return '--:--.---';
+
+            const totalSeconds = milliseconds / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = (totalSeconds % 60).toFixed(3);
+
+            return `${minutes}:${seconds.padStart(6, '0')}`;
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-refresh leaderboards
+        function startAutoRefresh() {
+            setInterval(() => {
+                const activeTab = document.querySelector('.tab.active');
+                if (activeTab) {
+                    const period = activeTab.textContent.includes('Today') ? 'daily' :
+                                 activeTab.textContent.includes('Month') ? 'monthly' : 'track';
+
+                    if (period === 'track' && currentTrack) {
+                        loadLeaderboard('track', currentTrack);
+                    } else if (period !== 'track') {
+                        loadLeaderboard(period);
+                    }
+                }
+            }, 30000); // Refresh every 30 seconds
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            generateQRCodes();
+            loadRaceCalendar();
+            loadLeaderboard('daily');
+            loadLeaderboard('monthly');
+            startAutoRefresh();
+        });
+    </script>
+</body>
+</html>

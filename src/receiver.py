@@ -37,6 +37,7 @@ PACKET_BUFFER_SIZE = 2048
 # Performance monitoring constants
 LOG_THROTTLE_INTERVAL_S = 10.0  # Log debug messages every 10 seconds
 STATUS_LOG_INTERVAL_S = 30.0    # Status updates every 30 seconds
+PERFORMANCE_MODE = True         # Enable performance optimizations (async sends, reduced logging)
 
 # Packet IDs (From F1 24 Spec Page 2/3)
 PACKET_ID_MOTION = 0
@@ -637,12 +638,13 @@ class TelemetryBridge:
     # Number of cars to track (same as in the packet classes)
     NUM_CARS = 22
 
-    def __init__(self, driver: str, track: str, url: str, ip: str, port: int, debug: bool, auto_detect_track: bool = True, datacloud: bool = False):
+    def __init__(self, driver: str, track: str, url: str, ip: str, port: int, debug: bool, auto_detect_track: bool = True, datacloud: bool = False, rig_number: int = None):
         self.driver_name: str = driver
         self.track_name: str = track
         self.original_track_name: str = track  # Store original for fallback
         self.auto_detect_track: bool = auto_detect_track
         self.datacloud_enabled: bool = datacloud
+        self.rig_number: int = rig_number  # Rig identifier (1 or 2)
         self.api_url: str = url
         self.udp_ip: str = ip
         self.udp_port: int = port
@@ -1125,6 +1127,7 @@ class TelemetryBridge:
                 "sessionId": self.session_id,
                 "driverName": self.driver_name,
                 "track": self.track_name,
+                "rigNumber": self.rig_number,
                 "connectionStatus": "waiting_for_data"
             }
         
@@ -1189,6 +1192,7 @@ class TelemetryBridge:
             "sessionId": self.session_id,
             "driverName": self.driver_name,
             "track": self.track_name,
+            "rigNumber": self.rig_number,
             # Validate lap number (should be reasonable, 1-200 for any F1 session)
             "lapNumber": self.current_lap_num if 1 <= self.current_lap_num <= 200 else 1,
             
@@ -1732,7 +1736,7 @@ class TelemetryBridge:
                     self.last_send_time = now # Update last send time *after* submitting
 
                 # 4. Periodic Status Update (optimized interval)
-                status_interval = STATUS_LOG_INTERVAL if PERFORMANCE_MODE else STATUS_UPDATE_INTERVAL_S
+                status_interval = STATUS_LOG_INTERVAL_S if PERFORMANCE_MODE else STATUS_UPDATE_INTERVAL_S
                 if now - self.last_status_update_time >= status_interval:
                     self._print_status_update()
                     self.last_status_update_time = now
@@ -1782,6 +1786,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=DEFAULT_UDP_PORT, help=f'UDP port to listen on (default: {DEFAULT_UDP_PORT})')
     parser.add_argument('--server-port', type=int, default=8080, help='Port for the web server to send data to (default: 8080)')
     parser.add_argument('--datacloud', action='store_true', help='Enable Salesforce Data Cloud integration')
+    parser.add_argument('--rig', type=int, choices=[1, 2], help='Rig number (1 or 2) to identify which simulator this receiver is for')
     args = parser.parse_args()
 
     # Basic validation and URL adjustment for server port
@@ -1805,7 +1810,8 @@ if __name__ == "__main__":
             port=args.port,
             debug=args.debug,
             auto_detect_track=not args.no_auto_track,
-            datacloud=args.datacloud
+            datacloud=args.datacloud,
+            rig_number=args.rig
         )
         bridge.run() # Start the main loop
     except Exception as e:

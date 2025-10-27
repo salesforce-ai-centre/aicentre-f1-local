@@ -307,8 +307,71 @@ def _should_trigger_performance_coaching(data):
 
 @app.route('/')
 def index():
-    """Serves the main dashboard HTML page."""
+    """Serves the welcome/admin navigation page."""
+    return render_template('welcome.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """Serves the single-rig dashboard (legacy route for debugging)."""
     return render_template('index.html')
+
+@app.route('/thank-you')
+def thank_you():
+    """Serves the thank you/success page after form submission."""
+    return render_template('thank_you.html')
+
+@app.route('/dual')
+def dual_dashboard():
+    """Serves the dual-rig dashboard showing both simulators side-by-side."""
+    # Get active sessions for both rigs
+    from services.session_service import get_session_service
+
+    session_service = get_session_service()
+    rig1_session = session_service.get_active_session_for_rig(1)
+    rig2_session = session_service.get_active_session_for_rig(2)
+
+    rigs = [
+        {
+            'rig_number': 1,
+            'driver_name': rig1_session.Driver_Name__c if rig1_session else 'Waiting...',
+            'session_id': rig1_session.Id if rig1_session else None
+        },
+        {
+            'rig_number': 2,
+            'driver_name': rig2_session.Driver_Name__c if rig2_session else 'Waiting...',
+            'session_id': rig2_session.Id if rig2_session else None
+        }
+    ]
+
+    return render_template('dual_rig_dashboard.html', rigs=rigs)
+
+@app.route('/attract')
+def attract_screen():
+    """Serves the attract/holding screen with QR code and leaderboards for a specific rig."""
+    # Check if rig parameter is provided, otherwise show error
+    rig = request.args.get('rig', type=int)
+    if not rig or rig not in [1, 2]:
+        return """
+        <html>
+        <body style="font-family: Arial; padding: 50px; text-align: center;">
+            <h1>⚠️ Missing Rig Parameter</h1>
+            <p>Please specify which simulator this is:</p>
+            <p><a href="/attract?rig=1" style="display: inline-block; margin: 10px; padding: 20px 40px; background: #ff6b6b; color: white; text-decoration: none; border-radius: 10px; font-size: 20px;">Simulator 1 (Left)</a></p>
+            <p><a href="/attract?rig=2" style="display: inline-block; margin: 10px; padding: 20px 40px; background: #4ecdc4; color: white; text-decoration: none; border-radius: 10px; font-size: 20px;">Simulator 2 (Right)</a></p>
+        </body>
+        </html>
+        """, 400
+    return render_template('attract_screen_single.html')
+
+@app.route('/start')
+def start_session_page():
+    """Serves the session start page (QR code landing page)."""
+    return render_template('start_session.html')
+
+@app.route('/summary/<session_id>')
+def session_summary(session_id):
+    """Serves the session summary page."""
+    return render_template('session_summary.html')
 
 @app.route('/data', methods=['POST'])
 def receive_data():
@@ -322,6 +385,32 @@ def receive_data():
 
     data = request.get_json()
     # Disable logging for performance
+
+    # --- Session Management Integration ---
+    from services.session_service import get_session_service
+
+    # Check for session-related events
+    session_event_code = data.get('event', {}).get('eventCode') if isinstance(data.get('event'), dict) else None
+    session_id = request.args.get('sessionId')  # Session ID passed from receiver
+
+    if session_event_code == 'SEND':
+        # Session ended - complete the session
+        if session_id:
+            try:
+                session_service = get_session_service()
+                session_service.complete_session(session_id)
+                logger.info(f"Session {session_id} completed via SEND event")
+                data['sessionCompleted'] = True
+            except Exception as e:
+                logger.error(f"Failed to complete session {session_id}: {e}")
+
+    # Update session with telemetry if session ID provided
+    if session_id and session_event_code != 'SEND':
+        try:
+            session_service = get_session_service()
+            session_service.update_session_telemetry(session_id, data)
+        except Exception as e:
+            logger.debug(f"Session telemetry update failed: {e}")
 
     # --- Event Detection & AI Coaching ---
     global latest_data, LAST_AI_MESSAGE_TIME
@@ -420,6 +509,343 @@ def stream():
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'  # Disable proxy buffering
     return response
+
+
+# --- Session Management API Endpoints (Salesforce REST API pattern) ---
+
+@app.route('/api/session', methods=['POST'])
+def create_session():
+    """
+    Create a new session (Salesforce REST: POST /services/data/vXX.X/sobjects/Session__c)
+    Request body: {rigNumber, driverName, termsAccepted, safetyAccepted}
+    """
+    from services.session_service import get_session_service
+
+    if not request.is_json:
+        return jsonify({"success": False, "error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ['rigNumber', 'driverName', 'termsAccepted', 'safetyAccepted']
+    missing = [f for f in required_fields if f not in data]
+    if missing:
+        return jsonify({
+            "success": False,
+            "error": f"Missing required fields: {', '.join(missing)}"
+        }), 400
+
+    try:
+        session_service = get_session_service()
+        session = session_service.create_waiting_session(
+            rig_number=data['rigNumber'],
+            driver_name=data['driverName'],
+            terms_accepted=data['termsAccepted'],
+            safety_accepted=data['safetyAccepted']
+        )
+
+        logger.info(f"Created session {session.Id} for {session.Driver_Name__c} on Rig {session.Rig_Number__c}")
+
+        return jsonify({
+            "success": True,
+            "id": session.Id,
+            "sessionName": session.Name,
+            "rigNumber": session.Rig_Number__c,
+            "trackName": session.Track_Name__c,
+            "raceName": session.Race_Name__c
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Failed to create session: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/session/<session_id>/start', methods=['POST'])
+def start_session(session_id):
+    """
+    Start a session (Custom Apex REST endpoint pattern)
+    Transitions session from Waiting to Active
+    """
+    from services.session_service import get_session_service
+
+    try:
+        session_service = get_session_service()
+        session = session_service.start_session(session_id)
+
+        logger.info(f"Started session {session.Id} for {session.Driver_Name__c}")
+
+        return jsonify({
+            "success": True,
+            "id": session.Id,
+            "status": session.Session_Status__c,
+            "startTime": session.Session_Start_Time__c.isoformat() if session.Session_Start_Time__c else None
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Failed to start session: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/session/<session_id>/complete', methods=['POST'])
+def complete_session_endpoint(session_id):
+    """
+    Complete a session (Custom Apex REST endpoint pattern)
+    Transitions session from Active to Completed
+    """
+    from services.session_service import get_session_service
+
+    try:
+        session_service = get_session_service()
+        session = session_service.complete_session(session_id)
+
+        logger.info(f"Completed session {session.Id} for {session.Driver_Name__c}")
+
+        # Get session summary for response
+        summary = session_service.get_session_summary(session_id)
+
+        return jsonify({
+            "success": True,
+            "id": session.Id,
+            "status": session.Session_Status__c,
+            "summary": summary
+        }), 200
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Failed to complete session: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/session/<session_id>', methods=['GET'])
+def get_session(session_id):
+    """
+    Get session details (Salesforce REST: GET /services/data/vXX.X/sobjects/Session__c/:id)
+    """
+    from repositories.session_repository import SessionRepository
+
+    try:
+        session_repo = SessionRepository()
+        session = session_repo.get_by_id(session_id)
+
+        if not session:
+            return jsonify({"success": False, "error": "Session not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "session": session.to_dict()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get session: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/session/active/<int:rig_number>', methods=['GET'])
+def get_active_session(rig_number):
+    """
+    Get active session for a rig (Custom query endpoint)
+    """
+    from services.session_service import get_session_service
+
+    try:
+        session_service = get_session_service()
+        session = session_service.get_active_session_for_rig(rig_number)
+
+        if not session:
+            return jsonify({
+                "success": True,
+                "hasActiveSession": False,
+                "session": None
+            }), 200
+
+        return jsonify({
+            "success": True,
+            "hasActiveSession": True,
+            "session": session.to_dict()
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get active session: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/leaderboard/<period>', methods=['GET'])
+def get_leaderboard(period):
+    """
+    Get leaderboard (SOQL query pattern)
+    Periods: daily, monthly, track
+    Query params: track (for track-specific leaderboards)
+    """
+    from repositories.session_repository import SessionRepository
+
+    try:
+        session_repo = SessionRepository()
+        track_name = request.args.get('track')
+        limit = int(request.args.get('limit', 10))
+
+        if period == 'daily':
+            leaderboard = session_repo.get_leaderboard_daily(track_name, limit)
+        elif period == 'monthly':
+            leaderboard = session_repo.get_leaderboard_monthly(track_name, limit)
+        elif period == 'track':
+            if not track_name:
+                return jsonify({
+                    "success": False,
+                    "error": "track parameter required for track leaderboard"
+                }), 400
+            leaderboard = session_repo.get_leaderboard_track(track_name, limit)
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Invalid period: {period}. Use 'daily', 'monthly', or 'track'"
+            }), 400
+
+        return jsonify({
+            "success": True,
+            "period": period,
+            "trackName": track_name,
+            "records": leaderboard
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get leaderboard: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/calendar/current', methods=['GET'])
+def get_current_race():
+    """
+    Get current F1 race from calendar
+    """
+    from services.calendar_service import get_calendar_service
+
+    try:
+        calendar_service = get_calendar_service()
+        summary = calendar_service.get_calendar_summary()
+
+        return jsonify({
+            "success": True,
+            "calendar": summary
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get calendar: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# --- Stream Deck Control Endpoints ---
+
+@app.route('/api/control/start-race', methods=['POST'])
+def control_start_race():
+    """
+    Stream Deck START button: Broadcast race start event to all browsers
+    Chrome extension will handle window switching on sim PCs
+    """
+    try:
+        logger.info("🏁 Stream Deck: Starting race - broadcasting to all browsers")
+
+        # Broadcast race start event via SSE to all connected browsers
+        event_data = {
+            "event": "raceStarting",
+            "rigs": [1, 2],
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Add to message queue for SSE broadcasting
+        message_queue.put(json.dumps(event_data))
+
+        logger.info(f"Broadcasted race start event: {event_data}")
+
+        return jsonify({
+            "success": True,
+            "message": "Race start signal sent - browsers will trigger window switch"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to start race: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/control/stop-race', methods=['POST'])
+def control_stop_race():
+    """
+    Stream Deck STOP button: End race and show results
+    """
+    from services.session_service import get_session_service
+
+    try:
+        logger.info("🏁 Stream Deck: Stopping race - showing results")
+
+        session_service = get_session_service()
+
+        # Complete active sessions
+        rig1_session = session_service.get_active_session_for_rig(1)
+        rig2_session = session_service.get_active_session_for_rig(2)
+
+        completed = []
+        if rig1_session:
+            session_service.complete_session(rig1_session.Id)
+            completed.append(1)
+        if rig2_session:
+            session_service.complete_session(rig2_session.Id)
+            completed.append(2)
+
+        return jsonify({
+            "success": True,
+            "message": "Race stopped",
+            "completedRigs": completed
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to stop race: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/control/restart', methods=['POST'])
+def control_restart():
+    """
+    Stream Deck RESTART button: Reset everything to attract screens
+    """
+    import subprocess
+    from services.session_service import get_session_service
+
+    try:
+        logger.info("🔄 Stream Deck: Restarting - returning to attract screens")
+
+        # Complete any active sessions first
+        session_service = get_session_service()
+        rig1_session = session_service.get_active_session_for_rig(1)
+        rig2_session = session_service.get_active_session_for_rig(2)
+
+        if rig1_session:
+            session_service.complete_session(rig1_session.Id)
+        if rig2_session:
+            session_service.complete_session(rig2_session.Id)
+
+        # Switch Sim 1 browser to attract screen
+        subprocess.Popen([
+            "ssh", "sim1admin@192.168.8.22",
+            "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
+        ])
+
+        # Switch Sim 2 browser to attract screen
+        subprocess.Popen([
+            "ssh", "sim2admin@192.168.8.21",
+            "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
+        ])
+
+        return jsonify({
+            "success": True,
+            "message": "System restarted - back to attract screens"
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to restart: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 # --- Helper Functions ---
 def format_time_ms(time_in_ms):

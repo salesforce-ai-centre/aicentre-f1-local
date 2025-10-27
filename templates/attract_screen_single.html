@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Racing Simulator - Ready to Race</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 30px;
+            gap: 30px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .current-race {
+            font-size: 28px;
+            color: #ffd700;
+            margin-top: 10px;
+        }
+
+        /* Main Content */
+        .content {
+            display: flex;
+            gap: 30px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* QR Code Section */
+        .qr-section {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 4px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .qr-section.rig-1 {
+            border-color: rgba(255, 107, 107, 0.8);
+        }
+
+        .qr-section.rig-2 {
+            border-color: rgba(78, 205, 196, 0.8);
+        }
+
+        .rig-title {
+            font-size: 56px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+
+        .rig-1 .rig-title {
+            color: #ff6b6b;
+        }
+
+        .rig-2 .rig-title {
+            color: #4ecdc4;
+        }
+
+        .qr-container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            margin: 30px 0;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .scan-text {
+            font-size: 32px;
+            margin-top: 30px;
+            text-align: center;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .dev-test-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .dev-test-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .rig-1 .dev-test-button {
+            border-color: rgba(255, 107, 107, 0.5);
+        }
+
+        .rig-1 .dev-test-button:hover {
+            background: rgba(255, 107, 107, 0.2);
+            border-color: #ff6b6b;
+        }
+
+        .rig-2 .dev-test-button {
+            border-color: rgba(78, 205, 196, 0.5);
+        }
+
+        .rig-2 .dev-test-button:hover {
+            background: rgba(78, 205, 196, 0.2);
+            border-color: #4ecdc4;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #4ecdc4;
+            margin-right: 10px;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        /* Leaderboard Section */
+        .leaderboard-section {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .leaderboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .leaderboard-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .leaderboard-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab {
+            padding: 8px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: translateY(-2px);
+        }
+
+        .leaderboard-content {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .leaderboard-content.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .leaderboard-table th {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            text-align: left;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: sticky;
+            top: 0;
+        }
+
+        .leaderboard-table td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 15px;
+        }
+
+        .leaderboard-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .position {
+            font-size: 20px;
+            font-weight: bold;
+            width: 50px;
+        }
+
+        .position-1 { color: #ffd700; }
+        .position-2 { color: #c0c0c0; }
+        .position-3 { color: #cd7f32; }
+
+        .lap-time {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 18px;
+        }
+
+        /* Game Start Overlay */
+        .game-start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.5s;
+        }
+
+        .game-start-overlay.active {
+            display: flex;
+        }
+
+        .game-start-content {
+            text-align: center;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .game-start-title {
+            font-size: 120px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .rig-1 .game-start-title {
+            color: #ff6b6b;
+            text-shadow: 0 0 40px rgba(255, 107, 107, 0.5);
+        }
+
+        .rig-2 .game-start-title {
+            color: #4ecdc4;
+            text-shadow: 0 0 40px rgba(78, 205, 196, 0.5);
+        }
+
+        .game-start-driver {
+            font-size: 48px;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .game-start-message {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 20px;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #4ecdc4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Game Start Overlay -->
+    <div class="game-start-overlay" id="gameStartOverlay">
+        <div class="game-start-content">
+            <div class="game-start-title">🏁 GAME START!</div>
+            <div class="game-start-driver" id="gameStartDriver">Welcome Driver</div>
+            <div class="loading-spinner"></div>
+            <div class="game-start-message">Loading dashboard...</div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="header">
+            <h1>🏎️ F1 Racing Simulator 🏁</h1>
+            <div class="current-race" id="currentRace">
+                <span class="status-indicator"></span>
+                Loading race calendar...
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- QR Code Section -->
+            <div class="qr-section" id="qrSection">
+                <div class="rig-title" id="rigTitle">SIMULATOR</div>
+                <div class="qr-container">
+                    <div id="qrcode"></div>
+                </div>
+                <div class="scan-text">
+                    📱 Scan to start your session
+                </div>
+                <a href="#" class="dev-test-button" id="devTestButton">
+                    🔧 Developer: Click to Test
+                </a>
+            </div>
+
+            <!-- Leaderboard Section -->
+            <div class="leaderboard-section">
+                <div class="leaderboard-header">
+                    <div class="leaderboard-title">🏆 Leaderboard</div>
+                    <div class="leaderboard-tabs">
+                        <button class="tab active" onclick="showLeaderboard('daily')">Today</button>
+                        <button class="tab" onclick="showLeaderboard('monthly')">Month</button>
+                        <button class="tab" onclick="showLeaderboard('track')">Track</button>
+                    </div>
+                </div>
+
+                <div id="leaderboard-daily" class="leaderboard-content active">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Driver</th>
+                                <th>Best Lap</th>
+                                <th>Laps</th>
+                            </tr>
+                        </thead>
+                        <tbody id="daily-tbody">
+                            <tr><td colspan="4" class="no-data">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="leaderboard-monthly" class="leaderboard-content">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Driver</th>
+                                <th>Best Lap</th>
+                                <th>Laps</th>
+                            </tr>
+                        </thead>
+                        <tbody id="monthly-tbody">
+                            <tr><td colspan="4" class="no-data">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="leaderboard-track" class="leaderboard-content">
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Driver</th>
+                                <th>Best Lap</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="track-tbody">
+                            <tr><td colspan="4" class="no-data">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get rig number from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const rigNumber = parseInt(urlParams.get('rig')) || 1;
+        const rigPosition = rigNumber === 1 ? 'Left' : 'Right';
+        let currentTrack = null;
+
+        // Set rig-specific styling
+        const qrSection = document.getElementById('qrSection');
+        qrSection.classList.add(`rig-${rigNumber}`);
+
+        // Connect to SSE stream to listen for race control events
+        const eventSource = new EventSource('/stream');
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                // Check if this is a race control event
+                if (data.event === 'raceStarting') {
+                    console.log('Received race start signal from Stream Deck');
+
+                    // Check if this rig should start
+                    if (data.rigs && data.rigs.includes(rigNumber)) {
+                        // Trigger window switch via Chrome extension
+                        console.log('Dispatching f1:switchToGame event for Chrome extension');
+                        window.dispatchEvent(new CustomEvent('f1:switchToGame'));
+
+                        // Visual feedback
+                        const overlay = document.getElementById('gameStartOverlay');
+                        if (overlay) {
+                            overlay.classList.add('active');
+                        }
+                    }
+                }
+            } catch (error) {
+                // Ignore parse errors - might be regular telemetry data
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error('SSE connection error:', error);
+        };
+
+        // Update title
+        document.getElementById('rigTitle').textContent = `🏁 SIMULATOR ${rigNumber} - ${rigPosition.toUpperCase()}`;
+
+        // Generate QR code for this rig
+        function generateQRCode() {
+            const baseUrl = window.location.origin;
+            new QRCode(document.getElementById("qrcode"), {
+                text: `${baseUrl}/start?rig=${rigNumber}`,
+                width: 300,
+                height: 300,
+                colorDark: "#000000",
+                colorLight: "#ffffff"
+            });
+        }
+
+        // Load race calendar
+        async function loadRaceCalendar() {
+            try {
+                const response = await fetch('/api/calendar/current');
+                const data = await response.json();
+
+                if (data.success && data.calendar.loaded) {
+                    const race = data.calendar.currentRace;
+                    currentTrack = race.location;
+
+                    document.getElementById('currentRace').innerHTML = `
+                        <span class="status-indicator"></span>
+                        ${race.raceName} - ${race.location}, ${race.country}
+                    `;
+
+                    // Load track-specific leaderboard
+                    loadLeaderboard('track', currentTrack);
+                }
+            } catch (error) {
+                console.error('Failed to load race calendar:', error);
+            }
+        }
+
+        // Load leaderboard
+        async function loadLeaderboard(period, track = null) {
+            try {
+                let url = `/api/leaderboard/${period}?limit=10`;
+                if (track && period === 'track') {
+                    url += `&track=${encodeURIComponent(track)}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayLeaderboard(period, data.records);
+                }
+            } catch (error) {
+                console.error(`Failed to load ${period} leaderboard:`, error);
+            }
+        }
+
+        // Display leaderboard data
+        function displayLeaderboard(period, records) {
+            const tbody = document.getElementById(`${period}-tbody`);
+
+            if (!records || records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No races yet. Be the first!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = records.map((record, index) => {
+                const position = index + 1;
+                const lapTime = formatLapTime(record.Best_Lap_Time__c);
+                const positionClass = position <= 3 ? `position-${position}` : '';
+                const date = record.Session_Start_Time__c ?
+                    new Date(record.Session_Start_Time__c).toLocaleDateString() : '-';
+
+                if (period === 'track') {
+                    return `
+                        <tr>
+                            <td class="position ${positionClass}">${position}</td>
+                            <td>${escapeHtml(record.Driver_Name__c)}</td>
+                            <td class="lap-time">${lapTime}</td>
+                            <td>${date}</td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td class="position ${positionClass}">${position}</td>
+                            <td>${escapeHtml(record.Driver_Name__c)}</td>
+                            <td class="lap-time">${lapTime}</td>
+                            <td>${record.Total_Laps__c || 0}</td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+        }
+
+        // Show leaderboard tab
+        function showLeaderboard(period) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.leaderboard-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`leaderboard-${period}`).classList.add('active');
+
+            // Load data if needed
+            if (period === 'track' && currentTrack) {
+                loadLeaderboard('track', currentTrack);
+            } else if (period !== 'track') {
+                loadLeaderboard(period);
+            }
+        }
+
+        // Format lap time
+        function formatLapTime(milliseconds) {
+            if (!milliseconds) return '--:--.---';
+
+            const totalSeconds = milliseconds / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = (totalSeconds % 60).toFixed(3);
+
+            return `${minutes}:${seconds.padStart(6, '0')}`;
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-refresh leaderboards
+        function startAutoRefresh() {
+            setInterval(() => {
+                const activeTab = document.querySelector('.tab.active');
+                if (activeTab) {
+                    const period = activeTab.textContent.toLowerCase().includes('today') ? 'daily' :
+                                 activeTab.textContent.toLowerCase().includes('month') ? 'monthly' : 'track';
+
+                    if (period === 'track' && currentTrack) {
+                        loadLeaderboard('track', currentTrack);
+                    } else if (period !== 'track') {
+                        loadLeaderboard(period);
+                    }
+                }
+            }, 30000); // Refresh every 30 seconds
+        }
+
+        // Developer test button - goes to start page
+        function setupDevButton() {
+            const devButton = document.getElementById('devTestButton');
+            const baseUrl = window.location.origin;
+            devButton.href = `${baseUrl}/start?rig=${rigNumber}`;
+        }
+
+        // Poll for active session
+        let sessionPollInterval = null;
+
+        async function checkForActiveSession() {
+            try {
+                const response = await fetch(`/api/session/active/${rigNumber}`);
+                const data = await response.json();
+
+                if (data.success && data.hasActiveSession) {
+                    const session = data.session;
+
+                    // Show game start overlay
+                    showGameStartOverlay(session);
+
+                    // Stop polling
+                    if (sessionPollInterval) {
+                        clearInterval(sessionPollInterval);
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking for active session:', error);
+            }
+        }
+
+        function showGameStartOverlay(session) {
+            const overlay = document.getElementById('gameStartOverlay');
+            const driverName = document.getElementById('gameStartDriver');
+
+            // Set rig class for color theme
+            overlay.classList.add(`rig-${rigNumber}`);
+
+            // Show driver name
+            driverName.textContent = `Welcome ${session.Driver_Name__c}!`;
+
+            // Show overlay
+            overlay.classList.add('active');
+
+            // Trigger Chrome extension to switch to game (if extension is installed)
+            console.log('Dispatching f1:switchToGame event for Chrome extension');
+            window.dispatchEvent(new CustomEvent('f1:switchToGame'));
+
+            // Listen for successful switch confirmation
+            window.addEventListener('message', (event) => {
+                if (event.data.type === 'F1_SWITCHED_TO_GAME') {
+                    console.log('✓ Successfully switched to game');
+                }
+                if (event.data.type === 'F1_SWITCH_FAILED') {
+                    console.error('✗ Failed to switch to game:', event.data.error);
+                }
+            });
+
+            // Keep overlay visible (browser stays in background)
+            // Dashboard will be visible when they Alt+Tab back
+        }
+
+        function startSessionPolling() {
+            // Check immediately
+            checkForActiveSession();
+
+            // Then check every 2 seconds
+            sessionPollInterval = setInterval(checkForActiveSession, 2000);
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            generateQRCode();
+            loadRaceCalendar();
+            loadLeaderboard('daily');
+            loadLeaderboard('monthly');
+            startAutoRefresh();
+            setupDevButton();
+            startSessionPolling(); // Start checking for active sessions
+        });
+    </script>
+</body>
+</html>

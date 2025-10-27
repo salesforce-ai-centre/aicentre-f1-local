@@ -1,101 +1,133 @@
-# F1 Dashboard
+# F1 Dual-Rig Telemetry Dashboard
 
-A real-time Formula 1 telemetry dashboard that captures and displays live data from the F1 24 video game.
+> Real-time telemetry visualization for two F1 simulators with live track mapping
 
-## Features
+![Dashboard Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Python](https://img.shields.io/badge/python-3.8+-green)
+![License](https://img.shields.io/badge/license-MIT-orange)
 
-- Real-time display of speed, RPM, gear, and pedal inputs
-- Tyre wear and brake temperature monitoring
-- ERS and DRS status indicators
-- Damage reporting
-- Lap timing and position tracking
-- Event notifications (completed laps, flags, etc.)
-- **Automatic track detection** from F1 game data
-- **AI Race Engineer** that provides contextual coaching via Salesforce AI Models API
-- **Salesforce Data Cloud integration** for telemetry streaming
+## Overview
+
+A production-ready dual-rig F1 telemetry dashboard designed for 55-inch 4K TV displays. Captures UDP data from two F1 25/24 game instances simultaneously, visualizes telemetry in real-time, and displays both drivers on a live track map for easy side-by-side comparison.
+
+### Key Features
+
+- ✅ **Dual-Rig Support**: Monitor two simulators simultaneously
+- ✅ **Real-Time Track Map**: Live 2D visualization with both drivers' positions
+- ✅ **3-Column Layout**: Optimized for 4K TV comparison (Sim 1 | Map | Sim 2)
+- ✅ **Comprehensive Telemetry**: Speed, RPM, Gear, Steering, Tires, Damage
+- ✅ **WebSocket Streaming**: Sub-10ms latency updates
+- ✅ **Marshal Zone Visualization**: Track flags in real-time
+- ✅ **Session State Management**: Auto-detects session start/end
+- ✅ **Data Cloud Integration**: Optional Salesforce Data Cloud streaming
 
 ## Quick Start
 
-### One-Command Setup
+### Prerequisites
 
-Run both the dashboard server and telemetry receiver with a single command:
+- Python 3.8+
+- F1 25 or F1 24 game
+- Two sim PCs on same network
+- 4K display recommended
+
+### Installation
 
 ```bash
-python3 scripts/run_dashboard.py --driver "Your Name" --datacloud
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment template
+cp .env.example .env
 ```
 
-Your web browser will automatically open with the dashboard, and the system will be ready to receive telemetry from the F1 game.
+### Running
 
-### Requirements
+```bash
+# Start dual-rig dashboard
+python3 scripts/run_dual_dashboard.py
 
-- F1 24 game with UDP telemetry enabled
-- Python 3.x
-- Web browser (Chrome, Firefox, etc.)
-
-## Installation
-
-1. Install dependencies:
-   ```bash
-   pip install -r config/requirements.txt
-   ```
-
-2. Configure environment (optional, for Data Cloud/AI features):
-   ```bash
-   cp config/.env.example .env
-   # Edit .env with your Salesforce credentials
-   ```
-
-3. Configure F1 game:
-   - Navigate to Settings → Telemetry Settings
-   - Enable UDP Telemetry
-   - Set UDP Port to 20777 (default)
-   - Set UDP Format to F1 2024
+# Open http://localhost:8080
+# Press F11 for fullscreen on TV
+```
 
 ## Project Structure
 
 ```
-├── config/              # Configuration files (.env, requirements.txt, etc.)
-├── docs/                # Documentation
-├── scripts/             # Utility scripts (setup, run_dashboard, performance testing)
-├── src/                 # Main application code
-│   ├── app.py          # Flask web server
-│   ├── receiver.py     # UDP telemetry receiver
-│   └── datacloud_integration.py  # Salesforce Data Cloud integration
-├── static/              # Frontend assets (CSS, JS, images)
-├── templates/           # HTML templates
-├── tests/               # Test files and performance monitoring
-└── logs/                # Runtime logs
+aicentre-f1-local/
+├── src/                   # Source code
+│   ├── app_dual_rig.py   # Main Flask app (ACTIVE)
+│   ├── receiver_multi.py # UDP receiver
+│   └── telemetry_gateway.py
+├── templates/             # HTML templates
+│   └── dual_rig_dashboard.html  (ACTIVE)
+├── static/                # Frontend assets
+│   ├── js/
+│   │   ├── dual-rig-dashboard.js (ACTIVE)
+│   │   └── track-map.js         (ACTIVE)
+│   ├── css/
+│   │   └── dual-rig-style.css   (ACTIVE)
+│   └── tracks/            # 30 F1 circuit files
+├── scripts/               # Utilities
+│   └── run_dual_dashboard.py (MAIN LAUNCHER)
+├── docs/                  # Documentation
+│   ├── setup/
+│   ├── architecture/
+│   └── development/
+└── tests/                 # Test suite
 ```
 
 ## Documentation
 
-- [Complete Setup Guide](docs/README.md) - Detailed setup instructions including Salesforce integration
-- [Performance Testing](docs/PERFORMANCE_TESTING.md) - Load testing and performance monitoring
-- [F1 UDP Specification](docs/UDPSPEC.md) - F1 24 telemetry data format
-- [AI Models Documentation](docs/models.md) - Salesforce Models API details
+- **[Setup Guide](docs/setup/DUAL_RIG_SETUP.md)** - Complete installation
+- **[Architecture](docs/architecture/DUAL_RIG_ARCHITECTURE.md)** - System design
+- **[Feature Roadmap](docs/development/FEATURE_ANALYSIS.md)** - Future features
 
-## Usage Options
+## Configuration
 
-### Command-line Arguments
+Edit `.env`:
 
+```bash
+RIG_A_PORT=20777
+RIG_A_DRIVER="Jacob Berry"
+RIG_B_PORT=20778
+RIG_B_DRIVER="Chris Webb"
 ```
-usage: run_dashboard.py [-h] [--driver DRIVER] [--track TRACK] [--no-auto-track]
-                        [--port PORT] [--no-browser] [--debug] [--datacloud]
 
-options:
-  --driver DRIVER      Driver name to display on dashboard
-  --track TRACK        Track name (auto-detected by default)
-  --no-auto-track      Disable automatic track detection
-  --port PORT          Web server port (default: 8080)
-  --no-browser         Don't automatically open browser
-  --debug              Enable debug logging
-  --datacloud          Enable Salesforce Data Cloud streaming
+Configure F1 Game:
 ```
+Settings → Telemetry → UDP ON
+Port: 20777 (Sim 1) / 20778 (Sim 2)
+Host IP: Your dashboard PC IP
+```
+
+## Troubleshooting
+
+**No data from sims?**
+```bash
+# Test reception
+python3 scripts/test_dual_receiver.py
+
+# Check firewall allows UDP ports 20777/20778
+```
+
+**Track map not loading?**
+- Verify `static/tracks/` directory exists
+- Check browser console for errors
+- Ensure session packet contains valid trackId
 
 ## Contributing
 
-This is a personal project for F1 telemetry visualization and AI-powered race coaching.
+Contributions welcome! Fork, create feature branch, and submit PR.
 
 ## License
 
-[Add your license here]
+MIT License
+
+## Support
+
+- Issues: GitHub Issues
+- Discussions: GitHub Discussions
+
+---
+
+**Built with ❤️ for sim racing**

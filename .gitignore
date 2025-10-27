@@ -58,3 +58,13 @@ venv.bak/
 # Logs
 logs/*.jsonl
 logs/*.json
+
+# Archive folders (cleaned up old files)
+archive/
+f1-25-telemetry-application-main/
+f1-25-telemetry-application-main.zip
+
+# NextJS (incomplete project)
+f1-dashboard-nextjs/node_modules/
+f1-dashboard-nextjs/.next/
+f1-dashboard-nextjs/out/

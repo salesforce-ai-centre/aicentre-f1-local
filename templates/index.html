@@ -396,5 +396,50 @@
     </div>
 
     <script src="/static/js/script-enhanced.js"></script>
+    <script>
+        // Check for sessionId in URL and auto-fill driver name
+        (async function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('sessionId');
+            const rigNumber = urlParams.get('rig');
+
+            if (sessionId) {
+                try {
+                    // Fetch session details
+                    const response = await fetch(`/api/session/${sessionId}`);
+                    const data = await response.json();
+
+                    if (data.success && data.session) {
+                        const driverName = data.session.Driver_Name__c;
+
+                        // Auto-fill the driver name input
+                        const nameInput = document.getElementById('driverNameInput');
+                        if (nameInput) {
+                            nameInput.value = driverName;
+                        }
+
+                        // Auto-click the start button to skip modal
+                        const startBtn = document.getElementById('startSessionBtn');
+                        if (startBtn) {
+                            setTimeout(() => {
+                                startBtn.click();
+                            }, 100);
+                        }
+
+                        // Update session info display
+                        const sessionInfoDiv = document.querySelector('.session-info');
+                        if (sessionInfoDiv) {
+                            const driverDisplay = sessionInfoDiv.querySelector('.info-item:first-child .info-value');
+                            if (driverDisplay) {
+                                driverDisplay.textContent = driverName;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to load session:', error);
+                }
+            }
+        })();
+    </script>
 </body>
 </html>

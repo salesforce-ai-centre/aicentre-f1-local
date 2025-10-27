@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Racing Simulator - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }
+
+        .header p {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: white;
+        }
+
+        .card-description {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.6;
+        }
+
+        .card-url {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #4ecdc4;
+            display: block;
+        }
+
+        .card.rig-1 {
+            border-color: rgba(255, 107, 107, 0.5);
+        }
+
+        .card.rig-1:hover {
+            border-color: #ff6b6b;
+        }
+
+        .card.rig-2 {
+            border-color: rgba(78, 205, 196, 0.5);
+        }
+
+        .card.rig-2:hover {
+            border-color: #4ecdc4;
+        }
+
+        .card.dual {
+            border-color: rgba(255, 215, 0, 0.5);
+        }
+
+        .card.dual:hover {
+            border-color: #ffd700;
+        }
+
+        .section-title {
+            font-size: 32px;
+            margin: 50px 0 30px;
+            color: #ffd700;
+            text-align: center;
+        }
+
+        .api-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .api-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .api-item {
+            padding: 15px;
+            margin: 10px 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .api-method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .api-method.get {
+            background: #4ecdc4;
+            color: #000;
+        }
+
+        .api-method.post {
+            background: #ffd700;
+            color: #000;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏎️ F1 Racing Simulator</h1>
+            <p>Admin & Navigation Panel</p>
+        </div>
+
+        <div class="section-title">📺 Display Screens</div>
+
+        <div class="grid">
+            <a href="/attract?rig=1" class="card rig-1">
+                <div class="card-icon">🔴</div>
+                <div class="card-title">Simulator 1 - Left</div>
+                <div class="card-description">
+                    Attract screen for the left simulator. Shows QR code and leaderboards.
+                </div>
+                <code class="card-url">/attract?rig=1</code>
+            </a>
+
+            <a href="/attract?rig=2" class="card rig-2">
+                <div class="card-icon">🔵</div>
+                <div class="card-title">Simulator 2 - Right</div>
+                <div class="card-description">
+                    Attract screen for the right simulator. Shows QR code and leaderboards.
+                </div>
+                <code class="card-url">/attract?rig=2</code>
+            </a>
+
+            <a href="/dual" class="card dual">
+                <div class="card-icon">🏁</div>
+                <div class="card-title">Dual Dashboard</div>
+                <div class="card-description">
+                    Side-by-side view of both simulators. Perfect for spectators and overhead displays.
+                </div>
+                <code class="card-url">/dual</code>
+            </a>
+        </div>
+
+        <div class="section-title">🔧 Developer Tools</div>
+
+        <div class="grid">
+            <a href="/start?rig=1" class="card">
+                <div class="card-icon">📝</div>
+                <div class="card-title">Test Form - Rig 1</div>
+                <div class="card-description">
+                    Session registration form for testing (same as QR code).
+                </div>
+                <code class="card-url">/start?rig=1</code>
+            </a>
+
+            <a href="/start?rig=2" class="card">
+                <div class="card-icon">📝</div>
+                <div class="card-title">Test Form - Rig 2</div>
+                <div class="card-description">
+                    Session registration form for testing (same as QR code).
+                </div>
+                <code class="card-url">/start?rig=2</code>
+            </a>
+
+            <a href="#" onclick="loadCalendar(); return false;" class="card">
+                <div class="card-icon">📅</div>
+                <div class="card-title">Current Race</div>
+                <div class="card-description">
+                    View current F1 race from calendar.
+                </div>
+                <code class="card-url">/api/calendar/current</code>
+            </a>
+
+            <a href="/dashboard" class="card">
+                <div class="card-icon">🖥️</div>
+                <div class="card-title">Single Dashboard</div>
+                <div class="card-description">
+                    Legacy single-rig dashboard for debugging.
+                </div>
+                <code class="card-url">/dashboard</code>
+            </a>
+        </div>
+
+        <div class="section-title">📊 API Endpoints</div>
+
+        <div class="api-section">
+            <ul class="api-list">
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/session/active/{rigNumber}
+                </li>
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/session/{sessionId}
+                </li>
+                <li class="api-item">
+                    <span class="api-method post">POST</span>
+                    /api/session
+                </li>
+                <li class="api-item">
+                    <span class="api-method post">POST</span>
+                    /api/session/{id}/start
+                </li>
+                <li class="api-item">
+                    <span class="api-method post">POST</span>
+                    /api/session/{id}/complete
+                </li>
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/leaderboard/daily
+                </li>
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/leaderboard/monthly
+                </li>
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/leaderboard/track?track={name}
+                </li>
+                <li class="api-item">
+                    <span class="api-method get">GET</span>
+                    /api/calendar/current
+                </li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>F1 Racing Simulator Control Panel</p>
+            <p>Documentation: <a href="/docs" style="color: #4ecdc4;">View Docs</a></p>
+        </div>
+    </div>
+
+    <script>
+        async function loadCalendar() {
+            try {
+                const response = await fetch('/api/calendar/current');
+                const data = await response.json();
+
+                if (data.success && data.calendar.loaded) {
+                    const race = data.calendar.currentRace;
+                    alert(`Current Race:\n\n${race.raceName}\n${race.location}, ${race.country}\n${race.circuit}\n\nRound ${race.round} of ${data.calendar.totalRaces}`);
+                }
+            } catch (error) {
+                alert('Failed to load calendar');
+            }
+        }
+    </script>
+</body>
+</html>
