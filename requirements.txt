@@ -1,9 +1,0 @@
-Flask
-flask-socketio
-python-socketio
-gunicorn
-requests
-python-dotenv
-PyJWT
-cryptography
-psutil

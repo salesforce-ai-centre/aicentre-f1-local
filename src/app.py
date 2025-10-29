@@ -5,8 +5,12 @@ import queue
 import threading
 import random
 import base64
+import subprocess
 import concurrent.futures
 import logging
+import requests
+from datetime import datetime
+from typing import Dict, Any, Optional, Tuple
 from flask import Flask, render_template, request, Response, jsonify, abort
 from dotenv import load_dotenv
 
@@ -35,6 +39,10 @@ app = Flask(__name__,
 # Data Cloud integration setup
 datacloud_client = None
 DATACLOUD_ENABLED = os.environ.get("DATACLOUD_ENABLED", "false").lower() == "true"
+
+# Simulator SSH configuration (for window control)
+SIM1_SSH_HOST = os.environ.get("SIM1_SSH_HOST", "sim1admin@192.168.8.22")
+SIM2_SSH_HOST = os.environ.get("SIM2_SSH_HOST", "sim2admin@192.168.8.21")
 
 if DATACLOUD_ENABLED:
     SALESFORCE_DOMAIN = os.environ.get("SALESFORCE_DOMAIN", "")
@@ -81,7 +89,9 @@ SALESFORCE_MODEL_VARIATIONS = [
 ]
 SALESFORCE_MODEL_NAME = SALESFORCE_MODEL_VARIATIONS[0]
 LAST_AI_MESSAGE_TIME = 0
+LAST_AI_MESSAGE_TIME_LOCK = threading.Lock()  # Thread safety for AI message timing
 AI_MESSAGE_HISTORY = []
+AI_MESSAGE_HISTORY_LOCK = threading.Lock()  # Thread safety for message history
 
 # Salesforce Models API validation
 if AI_ENABLED:
@@ -110,8 +120,18 @@ pending_ai_tasks = {}  # Track pending AI tasks by type to avoid duplicates
 
 # --- Event Detection Helper Functions ---
 
-def _detect_lap_completion(data, latest_data, current_time):
-    """Detect lap completion and generate event"""
+def _detect_lap_completion(data: Dict[str, Any], latest_data: Dict[str, Any], current_time: float) -> Optional[Dict[str, str]]:
+    """
+    Detect lap completion and generate event.
+
+    Args:
+        data: Current telemetry payload
+        latest_data: Previous telemetry payload
+        current_time: Current timestamp
+
+    Returns:
+        Event dictionary with message and type, or None if no lap completed
+    """
     if data.get("lapCompleted") and not latest_data.get("lapCompleted", False):
         if data.get("lastLapTime") is not None and data.get("lapNumber", 0) > 1:
             lap_num = data.get("lapNumber", 1) - 1
@@ -131,10 +151,18 @@ def _detect_lap_completion(data, latest_data, current_time):
     return None
 
 
-def _detect_ai_events(data, latest_data, current_time, last_ai_time):
+def _detect_ai_events(data: Dict[str, Any], latest_data: Dict[str, Any], current_time: float, last_ai_time: float) -> float:
     """
     Detect various racing events and trigger AI coaching.
-    Returns updated last_ai_time if any event was triggered.
+
+    Args:
+        data: Current telemetry payload
+        latest_data: Previous telemetry payload
+        current_time: Current timestamp
+        last_ai_time: Timestamp of last AI message
+
+    Returns:
+        Updated last_ai_time if any event was triggered, otherwise returns input last_ai_time
     """
     session_id = data.get("sessionId")
 
@@ -422,8 +450,16 @@ def receive_data():
         event_to_send = _detect_lap_completion(data, latest_data, current_time)
 
         # AI-powered event detection (only if AI is enabled)
-        if AI_ENABLED and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL_SECONDS):
-            LAST_AI_MESSAGE_TIME = _detect_ai_events(data, latest_data, current_time, LAST_AI_MESSAGE_TIME)
+        # Check AI timing with thread-safe lock
+        should_check_ai = False
+        with LAST_AI_MESSAGE_TIME_LOCK:
+            if AI_ENABLED and (current_time - LAST_AI_MESSAGE_TIME >= MIN_AI_MESSAGE_INTERVAL_SECONDS):
+                should_check_ai = True
+
+        if should_check_ai:
+            new_last_time = _detect_ai_events(data, latest_data, current_time, LAST_AI_MESSAGE_TIME)
+            with LAST_AI_MESSAGE_TIME_LOCK:
+                LAST_AI_MESSAGE_TIME = new_last_time
 
         # Update latest data *after* comparisons
         latest_data = data.copy()
@@ -826,16 +862,22 @@ def control_restart():
             session_service.complete_session(rig2_session.Id)
 
         # Switch Sim 1 browser to attract screen
-        subprocess.Popen([
-            "ssh", "sim1admin@192.168.8.22",
-            "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
-        ])
+        try:
+            subprocess.Popen([
+                "ssh", SIM1_SSH_HOST,
+                "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
+            ], stderr=subprocess.DEVNULL)
+        except Exception as e:
+            logger.warning(f"Failed to refresh Sim 1 browser: {e}")
 
         # Switch Sim 2 browser to attract screen
-        subprocess.Popen([
-            "ssh", "sim2admin@192.168.8.21",
-            "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
-        ])
+        try:
+            subprocess.Popen([
+                "ssh", SIM2_SSH_HOST,
+                "DISPLAY=:0 wmctrl -a 'Chrome' && xdotool key F5"
+            ], stderr=subprocess.DEVNULL)
+        except Exception as e:
+            logger.warning(f"Failed to refresh Sim 2 browser: {e}")
 
         return jsonify({
             "success": True,
@@ -1323,14 +1365,12 @@ def call_models_api(prompt, data):
         logger.error(f"Models API call failed: {e}", exc_info=True)
         raise Exception(f"Models API call failed: {e}")
 
-# This section has been intentionally removed as we're only using the Salesforce Models API
-
-# --- Payload Enrichment ---
-# The payload from your original script needs to include fields used by the dashboard:
-# - Ensure `position` (from LapData.m_carPosition) is included.
-# - Ensure `drsAllowed` (from CarStatusData.m_drsAllowed) is included.
-# - Ensure `ersStoreEnergy` (from CarStatusData.m_ersStoreEnergy) is included.
-# - Include damage fields: `damage.frontLeftWing`, `damage.frontRightWing`, etc.
+# --- Payload Requirements ---
+# The telemetry payload from receiver.py must include:
+# - position, drsAllowed, ersStoreEnergy
+# - damage fields (frontLeftWing, frontRightWing, etc.)
+# - tyre data (temperatures, wear, pressures)
+# See receiver.py _prepare_payload() for complete field list
 #   Map these from `CarDamageData` in your `_prepare_payload` function.
 # - Consider adding `m_vehicleFiaFlags` from CarStatusData for flag events.
 # - Consider adding `m_pitStatus` from LapData for pit events.

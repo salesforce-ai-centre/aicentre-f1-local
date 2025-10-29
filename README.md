@@ -1,133 +1,176 @@
-# F1 Dual-Rig Telemetry Dashboard
+# F1 Telemetry Dashboard
 
-> Real-time telemetry visualization for two F1 simulators with live track mapping
+Real-time dual-rig F1 telemetry dashboard for F1 25/24 game. Shows two simulators side-by-side with live track map.
 
-![Dashboard Version](https://img.shields.io/badge/version-2.0.0-blue)
-![Python](https://img.shields.io/badge/python-3.8+-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
-
-## Overview
-
-A production-ready dual-rig F1 telemetry dashboard designed for 55-inch 4K TV displays. Captures UDP data from two F1 25/24 game instances simultaneously, visualizes telemetry in real-time, and displays both drivers on a live track map for easy side-by-side comparison.
-
-### Key Features
-
-- ✅ **Dual-Rig Support**: Monitor two simulators simultaneously
-- ✅ **Real-Time Track Map**: Live 2D visualization with both drivers' positions
-- ✅ **3-Column Layout**: Optimized for 4K TV comparison (Sim 1 | Map | Sim 2)
-- ✅ **Comprehensive Telemetry**: Speed, RPM, Gear, Steering, Tires, Damage
-- ✅ **WebSocket Streaming**: Sub-10ms latency updates
-- ✅ **Marshal Zone Visualization**: Track flags in real-time
-- ✅ **Session State Management**: Auto-detects session start/end
-- ✅ **Data Cloud Integration**: Optional Salesforce Data Cloud streaming
+![Dashboard Status](https://img.shields.io/badge/status-production-green)
+![Python](https://img.shields.io/badge/python-3.11+-blue)
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.8+
-- F1 25 or F1 24 game
-- Two sim PCs on same network
-- 4K display recommended
-
-### Installation
-
+### Mac/Linux
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+pip install -r config/requirements.txt
 
-# Copy environment template
-cp .env.example .env
+# Start system
+./scripts/start_mac.sh
+
+# Open dashboard
+open http://localhost:8080/dual
 ```
 
-### Running
+### Windows (PowerShell)
+```powershell
+# Install dependencies
+pip install -r config/requirements.txt
 
+# Start system
+.\scripts\start_windows.ps1
+
+# Open dashboard
+start http://localhost:8080/dual
+```
+
+### Windows (Command Prompt)
+```batch
+REM Install dependencies
+pip install -r config\requirements.txt
+
+REM Start system
+scripts\start_windows.bat
+
+REM Open dashboard
+start http://localhost:8080/dual
+```
+
+## Features
+
+- ✅ **Dual Dashboard** - Two simulators side-by-side
+- ✅ **Live Track Map** - Real-time car positions
+- ✅ **60Hz Telemetry** - Speed, gear, RPM, inputs, tyres
+- ✅ **Session Management** - Driver registration via QR code
+- ✅ **F1 Calendar** - Auto-selects current race
+- ⚙️ **Data Cloud** - Optional Salesforce streaming
+
+## System Requirements
+
+- **Host PC**: Windows 10/11 or Mac (M1/M2/Intel) with Python 3.11+
+- **Sim PCs**: Windows or Linux running F1 25 or F1 24
+- **Network**: All PCs on same network
+
+## Configuration
+
+**F1 Game Settings:**
+- Telemetry → UDP: ON
+- Sim 1: IP `172.18.159.209`, Port `20777`
+- Sim 2: IP `172.18.159.209`, Port `20778`
+
+**Environment Variables** (optional):
 ```bash
-# Start dual-rig dashboard
-python3 scripts/run_dual_dashboard.py
-
-# Open http://localhost:8080
-# Press F11 for fullscreen on TV
+cp config/.env.example config/.env
+nano config/.env
 ```
 
 ## Project Structure
 
 ```
-aicentre-f1-local/
-├── src/                   # Source code
-│   ├── app_dual_rig.py   # Main Flask app (ACTIVE)
-│   ├── receiver_multi.py # UDP receiver
-│   └── telemetry_gateway.py
-├── templates/             # HTML templates
-│   └── dual_rig_dashboard.html  (ACTIVE)
-├── static/                # Frontend assets
-│   ├── js/
-│   │   ├── dual-rig-dashboard.js (ACTIVE)
-│   │   └── track-map.js         (ACTIVE)
-│   ├── css/
-│   │   └── dual-rig-style.css   (ACTIVE)
-│   └── tracks/            # 30 F1 circuit files
-├── scripts/               # Utilities
-│   └── run_dual_dashboard.py (MAIN LAUNCHER)
-├── docs/                  # Documentation
-│   ├── setup/
-│   ├── architecture/
-│   └── development/
-└── tests/                 # Test suite
+├── src/                    # Python application
+│   ├── app.py             # Flask server
+│   ├── receiver.py        # UDP decoder
+│   └── ...
+├── templates/             # HTML pages
+├── static/                # CSS/JS/images
+├── config/                # Configuration
+├── scripts/               # Utility scripts
+└── docs/                  # Documentation
 ```
 
 ## Documentation
 
-- **[Setup Guide](docs/setup/DUAL_RIG_SETUP.md)** - Complete installation
-- **[Architecture](docs/architecture/DUAL_RIG_ARCHITECTURE.md)** - System design
-- **[Feature Roadmap](docs/development/FEATURE_ANALYSIS.md)** - Future features
+- **[QUICKSTART.md](QUICKSTART.md)** - Step-by-step setup guide
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture
+- **[docs/README.md](docs/README.md)** - Complete documentation
+- **[CLAUDE.md](CLAUDE.md)** - AI assistant context
 
-## Configuration
+## Commands
 
-Edit `.env`:
-
+### Mac/Linux
 ```bash
-RIG_A_PORT=20777
-RIG_A_DRIVER="Jacob Berry"
-RIG_B_PORT=20778
-RIG_B_DRIVER="Chris Webb"
+# Start all services
+./scripts/start_mac.sh
+
+# Stop all services
+./scripts/stop_mac.sh
+
+# View logs
+tail -f logs/flask.log
 ```
 
-Configure F1 Game:
+### Windows (PowerShell)
+```powershell
+# Start all services
+.\scripts\start_windows.ps1
+
+# Stop all services
+.\scripts\stop_windows.ps1
+
+# View logs
+Get-Content logs\flask.log -Wait
 ```
-Settings → Telemetry → UDP ON
-Port: 20777 (Sim 1) / 20778 (Sim 2)
-Host IP: Your dashboard PC IP
+
+### Windows (Command Prompt)
+```batch
+# Start all services
+scripts\start_windows.bat
+
+# Stop all services
+scripts\stop_windows.bat
+
+# View logs
+type logs\flask.log
 ```
+
+## URLs
+
+- **Dual Dashboard**: http://localhost:8080/dual
+- **Attract Screen (Rig 1)**: http://localhost:8080/attract?rig=1
+- **Attract Screen (Rig 2)**: http://localhost:8080/attract?rig=2
+- **Welcome/Admin**: http://localhost:8080/
 
 ## Troubleshooting
 
-**No data from sims?**
-```bash
-# Test reception
-python3 scripts/test_dual_receiver.py
+**Port already in use:**
 
-# Check firewall allows UDP ports 20777/20778
+*Mac/Linux:*
+```bash
+./scripts/stop_mac.sh
+# or
+lsof -ti :20777 :20778 :8080 | xargs kill
 ```
 
-**Track map not loading?**
-- Verify `static/tracks/` directory exists
-- Check browser console for errors
-- Ensure session packet contains valid trackId
+*Windows (PowerShell):*
+```powershell
+.\scripts\stop_windows.ps1
+```
 
-## Contributing
+**Receiver not connecting:**
+- Check F1 game telemetry settings
+- Verify IP address matches host machine
+- Check firewall isn't blocking UDP ports
 
-Contributions welcome! Fork, create feature branch, and submit PR.
+## Development
+
+Built with:
+- Flask 3.1.2
+- Python 3.11+
+- SQLite
+- Server-Sent Events (SSE)
+- F1 25/24 UDP protocol
+
+## Team
+
+Internal project for AI Centre F1 simulator experience.
 
 ## License
 
-MIT License
-
-## Support
-
-- Issues: GitHub Issues
-- Discussions: GitHub Discussions
-
----
-
-**Built with ❤️ for sim racing**
+Internal use only.

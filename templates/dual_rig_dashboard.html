@@ -11,14 +11,28 @@
     <div class="dashboard-container">
         <!-- Header -->
         <header class="dashboard-header">
-            <h1>🏎️ Dual-Rig F1 25 Telemetry</h1>
-            <div class="connection-status">
-                <span class="status-indicator" id="connectionStatus"></span>
-                <span id="connectionText">Connecting...</span>
+            <div class="header-left">
+                <img src="/static/assets/SF_F1_logo.jpeg" alt="Salesforce F1 Partnership" class="brand-logo">
+                <h1>Dual-Rig F1 25 Telemetry</h1>
+            </div>
+            <div class="header-right">
+                <div class="datacloud-status">
+                    <span class="datacloud-indicator"></span>
+                    <span class="datacloud-text">
+                        <svg width="16" height="16" viewBox="0 0 16 16" class="datacloud-icon">
+                            <path fill="currentColor" d="M13.5 7c-.276 0-.5.224-.5.5s.224.5.5.5.5-.224.5-.5-.224-.5-.5-.5zm-11 0c-.276 0-.5.224-.5.5s.224.5.5.5.5-.224.5-.5-.224-.5-.5-.5zm5.5-5c-2.757 0-5 2.243-5 5s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 9c-2.206 0-4-1.794-4-4s1.794-4 4-4 4 1.794 4 4-1.794 4-4 4z"/>
+                        </svg>
+                        Streaming to Data Cloud
+                    </span>
+                </div>
+                <div class="connection-status">
+                    <span class="status-indicator" id="connectionStatus"></span>
+                    <span id="connectionText">Connecting...</span>
+                </div>
             </div>
         </header>
 
-        <!-- Main Content: Three Column Layout -->
+        <!-- Main Content: Two Column Layout -->
         <div class="split-view">
             <!-- LEFT: Sim Rig 1 Panel -->
             <div class="rig-panel" id="rigAPanel">
@@ -72,17 +86,53 @@
                                 </div>
                                 <span class="input-value" id="rigA-brake">0%</span>
                             </div>
-                            <div class="input-row">
+                            <div class="input-row steering-row">
                                 <label>Steering</label>
-                                <div class="steering-container">
-                                    <span class="steering-label">L</span>
-                                    <div class="steering-bar-container">
-                                        <div class="steering-center-line"></div>
-                                        <div class="steering-bar" id="rigA-steeringBar"></div>
+                                <div class="steering-gauge-container">
+                                    <svg class="steering-gauge" viewBox="0 0 100 100" width="100" height="100">
+                                        <!-- Background circle -->
+                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#2a2f3e" stroke-width="6"/>
+
+                                        <!-- Left arc (red when turning left) -->
+                                        <path d="M 50 10 A 40 40 0 0 0 10 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigA-leftArc"/>
+
+                                        <!-- Right arc (blue when turning right) -->
+                                        <path d="M 50 10 A 40 40 0 0 1 90 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigA-rightArc"/>
+
+                                        <!-- Center dot -->
+                                        <circle cx="50" cy="50" r="5" fill="white"/>
+
+                                        <!-- Steering needle -->
+                                        <line x1="50" y1="50" x2="50" y2="15"
+                                              stroke="white" stroke-width="3" stroke-linecap="round"
+                                              id="rigA-steeringNeedle"/>
+                                    </svg>
+                                    <div class="steering-labels">
+                                        <span>L</span>
+                                        <span>0</span>
+                                        <span>R</span>
                                     </div>
-                                    <span class="steering-label">R</span>
                                 </div>
-                                <span class="input-value" id="rigA-steer">0%</span>
+                                <span class="input-value" id="rigA-steer">0°</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- G-Forces -->
+                    <div class="metric-card gforce-card">
+                        <h3>G-Forces</h3>
+                        <div class="gforce-display">
+                            <div class="gforce-item">
+                                <span class="gforce-label">LAT</span>
+                                <span class="gforce-value" id="rigA-gLat">0.0</span>
+                            </div>
+                            <div class="gforce-item">
+                                <span class="gforce-label">LONG</span>
+                                <span class="gforce-value" id="rigA-gLong">0.0</span>
+                            </div>
+                            <div class="gforce-item">
+                                <span class="gforce-label">VERT</span>
+                                <span class="gforce-value" id="rigA-gVert">0.0</span>
                             </div>
                         </div>
                     </div>
@@ -133,6 +183,62 @@
                         <div class="metric-value lap-time" id="rigA-lastLap">--:--.---</div>
                     </div>
 
+                    <!-- DRS Status -->
+                    <div class="metric-card drs-card">
+                        <h3>DRS</h3>
+                        <div class="drs-status" id="rigA-drsStatus">
+                            <div class="drs-indicator" id="rigA-drsIndicator">DISABLED</div>
+                            <div class="drs-distance" id="rigA-drsDistance">--m</div>
+                        </div>
+                    </div>
+
+                    <!-- Fuel -->
+                    <div class="metric-card fuel-card">
+                        <h3>Fuel</h3>
+                        <div class="fuel-info">
+                            <div class="fuel-amount" id="rigA-fuel">-- kg</div>
+                            <div class="fuel-laps" id="rigA-fuelLaps">-- laps</div>
+                        </div>
+                    </div>
+
+                    <!-- ERS Energy -->
+                    <div class="metric-card ers-card">
+                        <h3>ERS</h3>
+                        <div class="ers-info">
+                            <div class="ers-energy" id="rigA-ersEnergy">-- MJ</div>
+                            <div class="ers-bar-container">
+                                <div class="ers-bar" id="rigA-ersBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tyre Wear -->
+                    <div class="metric-card tyre-wear-card">
+                        <h3>Tyre Wear (%)</h3>
+                        <div class="tyres">
+                            <div class="tyre-row">
+                                <div class="tyre-wear" id="rigA-wearFL">
+                                    <span class="tyre-label">FL</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                                <div class="tyre-wear" id="rigA-wearFR">
+                                    <span class="tyre-label">FR</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                            </div>
+                            <div class="tyre-row">
+                                <div class="tyre-wear" id="rigA-wearRL">
+                                    <span class="tyre-label">RL</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                                <div class="tyre-wear" id="rigA-wearRR">
+                                    <span class="tyre-label">RR</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Session Info -->
                     <div class="metric-card session-card">
                         <h3>Session</h3>
@@ -141,19 +247,6 @@
                             <div class="frame-count">Frame: <span id="rigA-frame">0</span></div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- CENTER: Track Map -->
-            <div class="track-map-panel">
-                <div class="track-map-header">
-                    <h2>🗺️ Track Map</h2>
-                    <div class="track-map-info">
-                        <span id="trackMapName">Waiting for track data...</span>
-                    </div>
-                </div>
-                <div class="track-map-container">
-                    <canvas id="trackMapCanvas"></canvas>
                 </div>
             </div>
 
@@ -209,17 +302,53 @@
                                 </div>
                                 <span class="input-value" id="rigB-brake">0%</span>
                             </div>
-                            <div class="input-row">
+                            <div class="input-row steering-row">
                                 <label>Steering</label>
-                                <div class="steering-container">
-                                    <span class="steering-label">L</span>
-                                    <div class="steering-bar-container">
-                                        <div class="steering-center-line"></div>
-                                        <div class="steering-bar" id="rigB-steeringBar"></div>
+                                <div class="steering-gauge-container">
+                                    <svg class="steering-gauge" viewBox="0 0 100 100" width="100" height="100">
+                                        <!-- Background circle -->
+                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#2a2f3e" stroke-width="6"/>
+
+                                        <!-- Left arc (red when turning left) -->
+                                        <path d="M 50 10 A 40 40 0 0 0 10 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigB-leftArc"/>
+
+                                        <!-- Right arc (blue when turning right) -->
+                                        <path d="M 50 10 A 40 40 0 0 1 90 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigB-rightArc"/>
+
+                                        <!-- Center dot -->
+                                        <circle cx="50" cy="50" r="5" fill="white"/>
+
+                                        <!-- Steering needle -->
+                                        <line x1="50" y1="50" x2="50" y2="15"
+                                              stroke="white" stroke-width="3" stroke-linecap="round"
+                                              id="rigB-steeringNeedle"/>
+                                    </svg>
+                                    <div class="steering-labels">
+                                        <span>L</span>
+                                        <span>0</span>
+                                        <span>R</span>
                                     </div>
-                                    <span class="steering-label">R</span>
                                 </div>
-                                <span class="input-value" id="rigB-steer">0%</span>
+                                <span class="input-value" id="rigB-steer">0°</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- G-Forces -->
+                    <div class="metric-card gforce-card">
+                        <h3>G-Forces</h3>
+                        <div class="gforce-display">
+                            <div class="gforce-item">
+                                <span class="gforce-label">LAT</span>
+                                <span class="gforce-value" id="rigB-gLat">0.0</span>
+                            </div>
+                            <div class="gforce-item">
+                                <span class="gforce-label">LONG</span>
+                                <span class="gforce-value" id="rigB-gLong">0.0</span>
+                            </div>
+                            <div class="gforce-item">
+                                <span class="gforce-label">VERT</span>
+                                <span class="gforce-value" id="rigB-gVert">0.0</span>
                             </div>
                         </div>
                     </div>
@@ -270,6 +399,62 @@
                         <div class="metric-value lap-time" id="rigB-lastLap">--:--.---</div>
                     </div>
 
+                    <!-- DRS Status -->
+                    <div class="metric-card drs-card">
+                        <h3>DRS</h3>
+                        <div class="drs-status" id="rigB-drsStatus">
+                            <div class="drs-indicator" id="rigB-drsIndicator">DISABLED</div>
+                            <div class="drs-distance" id="rigB-drsDistance">--m</div>
+                        </div>
+                    </div>
+
+                    <!-- Fuel -->
+                    <div class="metric-card fuel-card">
+                        <h3>Fuel</h3>
+                        <div class="fuel-info">
+                            <div class="fuel-amount" id="rigB-fuel">-- kg</div>
+                            <div class="fuel-laps" id="rigB-fuelLaps">-- laps</div>
+                        </div>
+                    </div>
+
+                    <!-- ERS Energy -->
+                    <div class="metric-card ers-card">
+                        <h3>ERS</h3>
+                        <div class="ers-info">
+                            <div class="ers-energy" id="rigB-ersEnergy">-- MJ</div>
+                            <div class="ers-bar-container">
+                                <div class="ers-bar" id="rigB-ersBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tyre Wear -->
+                    <div class="metric-card tyre-wear-card">
+                        <h3>Tyre Wear (%)</h3>
+                        <div class="tyres">
+                            <div class="tyre-row">
+                                <div class="tyre-wear" id="rigB-wearFL">
+                                    <span class="tyre-label">FL</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                                <div class="tyre-wear" id="rigB-wearFR">
+                                    <span class="tyre-label">FR</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                            </div>
+                            <div class="tyre-row">
+                                <div class="tyre-wear" id="rigB-wearRL">
+                                    <span class="tyre-label">RL</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                                <div class="tyre-wear" id="rigB-wearRR">
+                                    <span class="tyre-label">RR</span>
+                                    <span class="wear-value">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Session Info -->
                     <div class="metric-card session-card">
                         <h3>Session</h3>
@@ -283,7 +468,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/track-map.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dual-rig-dashboard.js') }}"></script>
 </body>
 </html>

@@ -8,13 +8,6 @@ const TIRE_INDEX_RR = 1;
 const TIRE_INDEX_FL = 2;
 const TIRE_INDEX_FR = 3;
 
-// Initialize track map
-let trackMap = null;
-document.addEventListener('DOMContentLoaded', () => {
-    trackMap = new TrackMap('trackMapCanvas');
-    console.log('Track map initialized');
-});
-
 // Tire temperature thresholds
 const TIRE_TEMP_MIN = 80;
 const TIRE_TEMP_MAX = 105;
@@ -103,30 +96,6 @@ function updateRigDisplay(rigId, data) {
         updateElement(`${prefix}-sessionType`, data.sessionTypeName);
     }
 
-    // Track map handling - load track when session packet received
-    if (data.trackId !== undefined && trackMap) {
-        if (trackMap.trackId !== data.trackId) {
-            console.log(`Loading track: ${data.trackName} (ID: ${data.trackId})`);
-            trackMap.loadTrack(data.trackId).then(success => {
-                if (success) {
-                    updateElement('trackMapName', data.trackName || 'Unknown Track');
-
-                    // Set marshal zones if available
-                    if (data.marshalZones && data.trackLength) {
-                        trackMap.setMarshalZones(data.marshalZones, data.trackLength);
-                    }
-                }
-            });
-        }
-    }
-
-    // Update car position on track map (from motion packet)
-    if (data.worldPositionX !== undefined && data.worldPositionZ !== undefined && trackMap) {
-        const driverName = rigId === 'RIG_A' ? 'Sim Rig 1' : 'Sim Rig 2';
-        trackMap.updateCarPosition(rigId, data.worldPositionX, data.worldPositionZ, driverName);
-        trackMap.render();
-    }
-
     // Telemetry data (packet ID 6)
     if (data.speed !== undefined) {
         updateElement(`${prefix}-speed`, Math.round(data.speed));
@@ -157,9 +126,9 @@ function updateRigDisplay(rigId, data) {
 
     if (data.steer !== undefined) {
         // Steer is -1.0 (full left) to +1.0 (full right)
-        const steerPercent = data.steer * 100;
-        updateSteeringBar(`${prefix}-steeringBar`, data.steer);
-        updateElement(`${prefix}-steer`, `${steerPercent >= 0 ? '+' : ''}${Math.round(steerPercent)}%`);
+        const steerAngle = data.steer * 90; // Convert to degrees (-90 to +90)
+        updateSteeringGauge(prefix, data.steer);
+        updateElement(`${prefix}-steer`, `${steerAngle >= 0 ? '+' : ''}${Math.round(steerAngle)}°`);
     }
 
     // Tyre temps (RL, RR, FL, FR indices: 0, 1, 2, 3)
@@ -169,6 +138,48 @@ function updateRigDisplay(rigId, data) {
         updateTyre(`${prefix}-tyreFR`, temps[TIRE_INDEX_FR]);
         updateTyre(`${prefix}-tyreRL`, temps[TIRE_INDEX_RL]);
         updateTyre(`${prefix}-tyreRR`, temps[TIRE_INDEX_RR]);
+    }
+
+    // G-Forces (packet ID 0 - CarMotionData)
+    if (data.gForceLateral !== undefined) {
+        updateElement(`${prefix}-gLat`, data.gForceLateral.toFixed(1));
+    }
+    if (data.gForceLongitudinal !== undefined) {
+        updateElement(`${prefix}-gLong`, data.gForceLongitudinal.toFixed(1));
+    }
+    if (data.gForceVertical !== undefined) {
+        updateElement(`${prefix}-gVert`, data.gForceVertical.toFixed(1));
+    }
+
+    // DRS status (packet ID 6 - CarTelemetryData)
+    if (data.drs !== undefined) {
+        updateDRS(prefix, data.drs, data.drsActivationDistance);
+    }
+
+    // Fuel data (packet ID 7 - CarStatusData)
+    if (data.fuelInTank !== undefined) {
+        updateElement(`${prefix}-fuel`, `${data.fuelInTank.toFixed(1)} kg`);
+    }
+    if (data.fuelRemainingLaps !== undefined) {
+        updateElement(`${prefix}-fuelLaps`, `${data.fuelRemainingLaps.toFixed(1)} laps`);
+    }
+
+    // ERS energy (packet ID 7 - CarStatusData)
+    if (data.ersStoreEnergy !== undefined) {
+        const energyMJ = (data.ersStoreEnergy / 1000000).toFixed(2); // Convert J to MJ
+        const maxEnergy = 4000000; // 4 MJ max
+        const percentage = (data.ersStoreEnergy / maxEnergy) * 100;
+        updateElement(`${prefix}-ersEnergy`, `${energyMJ} MJ`);
+        updateProgressBar(`${prefix}-ersBar`, Math.min(percentage, 100));
+    }
+
+    // Tyre wear (packet ID 10 - CarDamageData)
+    if (data.tyresWear) {
+        const wear = data.tyresWear;
+        updateTyreWear(`${prefix}-wearFL`, wear[TIRE_INDEX_FL]);
+        updateTyreWear(`${prefix}-wearFR`, wear[TIRE_INDEX_FR]);
+        updateTyreWear(`${prefix}-wearRL`, wear[TIRE_INDEX_RL]);
+        updateTyreWear(`${prefix}-wearRR`, wear[TIRE_INDEX_RR]);
     }
 
     // Lap data (packet ID 2)
@@ -229,18 +240,41 @@ function updateRPMBar(id, rpm) {
 }
 
 /**
- * Update steering bar (-1.0 = full left, 0 = center, +1.0 = full right)
+ * Update circular steering gauge (-1.0 = full left, 0 = center, +1.0 = full right)
  */
-function updateSteeringBar(id, steerValue) {
-    const bar = document.getElementById(id);
-    if (!bar) return;
+function updateSteeringGauge(prefix, steerValue) {
+    const needle = document.getElementById(`${prefix}-steeringNeedle`);
+    const leftArc = document.getElementById(`${prefix}-leftArc`);
+    const rightArc = document.getElementById(`${prefix}-rightArc`);
 
-    // steerValue ranges from -1.0 (left) to +1.0 (right)
-    // Position the bar: -1.0 = 0%, 0 = 50%, +1.0 = 100%
-    const position = ((steerValue + 1) / 2) * 100; // Convert to 0-100%
+    if (!needle || !leftArc || !rightArc) return;
 
-    bar.style.left = `${position}%`;
-    bar.style.transform = 'translateX(-50%)';
+    // Rotate needle: -90° (full left) to +90° (full right)
+    const angle = steerValue * 90;
+    needle.setAttribute('transform', `rotate(${angle} 50 50)`);
+
+    // Highlight arcs based on direction
+    if (steerValue < -0.05) {
+        // Turning left - highlight left arc in red
+        const intensity = Math.abs(steerValue);
+        leftArc.setAttribute('stroke', `rgba(230, 57, 70, ${0.3 + intensity * 0.7})`);
+        leftArc.setAttribute('stroke-width', '8');
+        rightArc.setAttribute('stroke', '#3a3f4e');
+        rightArc.setAttribute('stroke-width', '6');
+    } else if (steerValue > 0.05) {
+        // Turning right - highlight right arc in blue
+        const intensity = Math.abs(steerValue);
+        rightArc.setAttribute('stroke', `rgba(0, 119, 182, ${0.3 + intensity * 0.7})`);
+        rightArc.setAttribute('stroke-width', '8');
+        leftArc.setAttribute('stroke', '#3a3f4e');
+        leftArc.setAttribute('stroke-width', '6');
+    } else {
+        // Center - both arcs dim
+        leftArc.setAttribute('stroke', '#3a3f4e');
+        leftArc.setAttribute('stroke-width', '6');
+        rightArc.setAttribute('stroke', '#3a3f4e');
+        rightArc.setAttribute('stroke-width', '6');
+    }
 }
 
 /**
@@ -344,5 +378,56 @@ function updateRigStatus(rigId, message, color) {
 
 // Check data freshness every 2 seconds
 setInterval(checkDataFreshness, 2000);
+
+/**
+ * Update DRS status indicator
+ */
+function updateDRS(prefix, drsStatus, drsDistance) {
+    const indicator = document.getElementById(`${prefix}-drsIndicator`);
+    const distance = document.getElementById(`${prefix}-drsDistance`);
+
+    if (!indicator) return;
+
+    if (drsStatus === 1) {
+        // DRS is ON
+        indicator.textContent = 'ENABLED';
+        indicator.classList.remove('available');
+        indicator.classList.add('enabled');
+        if (distance) distance.textContent = 'Active';
+    } else if (drsDistance !== undefined && drsDistance > 0) {
+        // DRS is available soon
+        indicator.textContent = 'AVAILABLE';
+        indicator.classList.remove('enabled');
+        indicator.classList.add('available');
+        if (distance) distance.textContent = `${Math.round(drsDistance)}m`;
+    } else {
+        // DRS is disabled
+        indicator.textContent = 'DISABLED';
+        indicator.classList.remove('enabled', 'available');
+        if (distance) distance.textContent = '--';
+    }
+}
+
+/**
+ * Update tyre wear percentage
+ */
+function updateTyreWear(id, wearValue) {
+    const element = document.getElementById(id);
+    if (!element) return;
+
+    const wearPercent = Math.round(wearValue);
+    const valueElement = element.querySelector('.wear-value');
+    if (valueElement) {
+        valueElement.textContent = `${wearPercent}%`;
+    }
+
+    // Color coding based on wear level
+    element.classList.remove('high-wear', 'critical-wear');
+    if (wearPercent >= 80) {
+        element.classList.add('critical-wear');
+    } else if (wearPercent >= 60) {
+        element.classList.add('high-wear');
+    }
+}
 
 console.log('✓ Dual-rig dashboard ready');
