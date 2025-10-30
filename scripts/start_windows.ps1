@@ -16,7 +16,7 @@ Set-Location $ProjectRoot
 # Check if virtual environment exists
 if (-not (Test-Path "venv")) {
     Write-Host "Virtual environment not found. Creating..." -ForegroundColor Yellow
-    python -m venv venv
+    py -m venv venv
 }
 
 # Activate virtual environment
@@ -63,7 +63,7 @@ if (-not (Test-Path "logs")) {
 
 # Start Flask server
 Write-Host "[1/3] Starting Flask Web Server (port 8080)..." -ForegroundColor Yellow
-$flask = Start-Process python -ArgumentList "src\app.py" -RedirectStandardOutput "logs\flask.log" -RedirectStandardError "logs\flask_error.log" -PassThru -WindowStyle Hidden
+$flask = Start-Process py -ArgumentList "src\app.py" -RedirectStandardOutput "logs\flask.log" -RedirectStandardError "logs\flask_error.log" -PassThru -WindowStyle Hidden
 Write-Host "       Flask PID: $($flask.Id)" -ForegroundColor Green
 
 # Wait a moment for Flask to start
@@ -71,12 +71,12 @@ Start-Sleep -Seconds 2
 
 # Start UDP Receiver - Rig 1
 Write-Host "[2/3] Starting UDP Receiver - Rig 1 (port 20777)..." -ForegroundColor Yellow
-$rig1 = Start-Process python -ArgumentList "src\receiver.py --url http://localhost:8080/data --driver `"Rig 1`" --port 20777 --rig 1" -RedirectStandardOutput "logs\receiver-rig1.log" -RedirectStandardError "logs\receiver-rig1_error.log" -PassThru -WindowStyle Hidden
+$rig1 = Start-Process py -ArgumentList "src\receiver.py --url http://localhost:8080/data --driver `"Rig 1`" --port 20777 --rig 1" -RedirectStandardOutput "logs\receiver-rig1.log" -RedirectStandardError "logs\receiver-rig1_error.log" -PassThru -WindowStyle Hidden
 Write-Host "       Rig 1 Receiver PID: $($rig1.Id)" -ForegroundColor Green
 
 # Start UDP Receiver - Rig 2
 Write-Host "[3/3] Starting UDP Receiver - Rig 2 (port 20778)..." -ForegroundColor Yellow
-$rig2 = Start-Process python -ArgumentList "src\receiver.py --url http://localhost:8080/data --driver `"Rig 2`" --port 20778 --rig 2" -RedirectStandardOutput "logs\receiver-rig2.log" -RedirectStandardError "logs\receiver-rig2_error.log" -PassThru -WindowStyle Hidden
+$rig2 = Start-Process py -ArgumentList "src\receiver.py --url http://localhost:8080/data --driver `"Rig 2`" --port 20778 --rig 2" -RedirectStandardOutput "logs\receiver-rig2.log" -RedirectStandardError "logs\receiver-rig2_error.log" -PassThru -WindowStyle Hidden
 Write-Host "       Rig 2 Receiver PID: $($rig2.Id)" -ForegroundColor Green
 
 Write-Host ""

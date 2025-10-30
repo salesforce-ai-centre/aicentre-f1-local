@@ -138,6 +138,10 @@ class F1TelemetryReceiverMulti:
         self.last_packet_time = time.time()
         self.latest_header = header
 
+        # Log packet format once per session for debugging
+        if self.packet_count == 1:
+            logger.info(f"[{self.rig_id}] Game telemetry format: {header.m_packetFormat} (Year: {header.m_gameYear})")
+
         # Route to appropriate handler
         packet_id = header.m_packetId
         payload = data[PacketHeader.SIZE:]
@@ -175,29 +179,61 @@ class F1TelemetryReceiverMulti:
         """Process lap data packet"""
         packet = PacketLapData.from_bytes(header, payload)
         if not packet or not packet.m_lapData:
+            logger.warning(f"[{self.rig_id}] Failed to parse lap data packet (payload size: {len(payload)})")
             return
 
         self.latest_lap_data = packet
         player_index = header.m_playerCarIndex
 
-        if player_index < len(packet.m_lapData):
-            player_lap = packet.m_lapData[player_index]
-            self._send_callback({
-                'packetId': PACKET_ID_LAP_DATA,
-                'sessionUID': header.m_sessionUID,
-                'sessionTime': header.m_sessionTime,
-                'frameIdentifier': header.m_frameIdentifier,
-                'overallFrameIdentifier': header.m_overallFrameIdentifier,
-                'playerCarIndex': player_index,
-                'lastLapTimeInMS': player_lap.m_lastLapTimeInMS,
-                'currentLapTimeInMS': player_lap.m_currentLapTimeInMS,
-                'currentLapNum': player_lap.m_currentLapNum,
-                'carPosition': player_lap.m_carPosition + 1,  # Convert to 1-indexed
-                'sector': player_lap.m_sector,
-                'currentLapInvalid': player_lap.m_currentLapInvalid,
-                'pitStatus': player_lap.m_pitStatus,
-                'lapDistance': player_lap.m_lapDistance,
-            })
+        if player_index >= len(packet.m_lapData):
+            logger.warning(f"[{self.rig_id}] Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
+            return
+
+        player_lap = packet.m_lapData[player_index]
+
+        # Validate and sanitize position (should be 0-21 for 22 cars, or 0-19 for 20 cars)
+        # If out of range, it's likely corrupt data
+        position = player_lap.m_carPosition
+        if position > 100:  # Clearly corrupt
+            logger.warning(f"[{self.rig_id}] Corrupt position data: {position} (format: {header.m_packetFormat})")
+            logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={player_lap.m_currentLapNum}, "
+                        f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
+            return
+
+        # Validate lap number (should be reasonable, e.g., 1-200)
+        lap_num = player_lap.m_currentLapNum
+        if lap_num > 200 or lap_num < 0:
+            logger.warning(f"[{self.rig_id}] Corrupt lap number: {lap_num} (format: {header.m_packetFormat})")
+            logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: pos={position}, "
+                        f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
+            return
+
+        # Validate lap times (should be reasonable, max ~2 hours = 7,200,000 ms)
+        last_lap_time = player_lap.m_lastLapTimeInMS
+        current_lap_time = player_lap.m_currentLapTimeInMS
+
+        if last_lap_time > 7200000 or current_lap_time > 7200000:
+            logger.warning(f"[{self.rig_id}] Corrupt lap times - last: {last_lap_time}ms, current: {current_lap_time}ms "
+                          f"(format: {header.m_packetFormat})")
+            logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={lap_num}, pos={position}")
+            return
+
+        self._send_callback({
+            'packetId': PACKET_ID_LAP_DATA,
+            'sessionUID': header.m_sessionUID,
+            'sessionTime': header.m_sessionTime,
+            'frameIdentifier': header.m_frameIdentifier,
+            'overallFrameIdentifier': header.m_overallFrameIdentifier,
+            'playerCarIndex': player_index,
+            'lastLapTimeInMS': last_lap_time,
+            'currentLapTimeInMS': current_lap_time,
+            'currentLapNum': lap_num,
+            'carPosition': position + 1,  # Convert to 1-indexed
+            'sector': player_lap.m_sector,
+            'currentLapInvalid': player_lap.m_currentLapInvalid,
+            'pitStatus': player_lap.m_pitStatus,
+            'lapDistance': player_lap.m_lapDistance,
+        })
 
     def _handle_car_telemetry(self, header: PacketHeader, payload: bytes):
         """Process car telemetry packet"""

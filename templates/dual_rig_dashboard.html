@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dual-Rig F1 Telemetry Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dual-rig-style.css') }}">
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -88,29 +88,40 @@
                             </div>
                             <div class="input-row steering-row">
                                 <label>Steering</label>
-                                <div class="steering-gauge-container">
-                                    <svg class="steering-gauge" viewBox="0 0 100 100" width="100" height="100">
-                                        <!-- Background circle -->
-                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#2a2f3e" stroke-width="6"/>
+                                <div class="steering-wheel-container">
+                                    <svg class="steering-wheel" viewBox="0 0 120 120" width="120" height="120">
+                                        <defs>
+                                            <!-- Gradient for wheel -->
+                                            <radialGradient id="wheelGradientA">
+                                                <stop offset="0%" style="stop-color:#4a5568;stop-opacity:1" />
+                                                <stop offset="100%" style="stop-color:#2d3748;stop-opacity:1" />
+                                            </radialGradient>
+                                        </defs>
 
-                                        <!-- Left arc (red when turning left) -->
-                                        <path d="M 50 10 A 40 40 0 0 0 10 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigA-leftArc"/>
+                                        <!-- Outer ring -->
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#2a2f3e" stroke-width="8"/>
 
-                                        <!-- Right arc (blue when turning right) -->
-                                        <path d="M 50 10 A 40 40 0 0 1 90 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigA-rightArc"/>
+                                        <!-- Steering wheel with rotation -->
+                                        <g id="rigA-wheelRotate">
+                                            <!-- Wheel rim -->
+                                            <circle cx="60" cy="60" r="35" fill="url(#wheelGradientA)" stroke="#1a202c" stroke-width="3"/>
 
-                                        <!-- Center dot -->
-                                        <circle cx="50" cy="50" r="5" fill="white"/>
+                                            <!-- Spokes -->
+                                            <line x1="60" y1="30" x2="60" y2="90" stroke="#1a202c" stroke-width="4"/>
+                                            <line x1="30" y1="60" x2="90" y2="60" stroke="#1a202c" stroke-width="4"/>
 
-                                        <!-- Steering needle -->
-                                        <line x1="50" y1="50" x2="50" y2="15"
-                                              stroke="white" stroke-width="3" stroke-linecap="round"
-                                              id="rigA-steeringNeedle"/>
+                                            <!-- Center hub -->
+                                            <circle cx="60" cy="60" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+
+                                            <!-- Top marker (12 o'clock position) -->
+                                            <circle cx="60" cy="30" r="4" fill="#FFB740"/>
+                                        </g>
                                     </svg>
-                                    <div class="steering-labels">
-                                        <span>L</span>
-                                        <span>0</span>
-                                        <span>R</span>
+
+                                    <!-- Direction indicators -->
+                                    <div class="steering-indicators">
+                                        <div class="steer-indicator left" id="rigA-steerLeft">L</div>
+                                        <div class="steer-indicator right" id="rigA-steerRight">R</div>
                                     </div>
                                 </div>
                                 <span class="input-value" id="rigA-steer">0°</span>
@@ -304,29 +315,40 @@
                             </div>
                             <div class="input-row steering-row">
                                 <label>Steering</label>
-                                <div class="steering-gauge-container">
-                                    <svg class="steering-gauge" viewBox="0 0 100 100" width="100" height="100">
-                                        <!-- Background circle -->
-                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#2a2f3e" stroke-width="6"/>
+                                <div class="steering-wheel-container">
+                                    <svg class="steering-wheel" viewBox="0 0 120 120" width="120" height="120">
+                                        <defs>
+                                            <!-- Gradient for wheel -->
+                                            <radialGradient id="wheelGradientB">
+                                                <stop offset="0%" style="stop-color:#4a5568;stop-opacity:1" />
+                                                <stop offset="100%" style="stop-color:#2d3748;stop-opacity:1" />
+                                            </radialGradient>
+                                        </defs>
 
-                                        <!-- Left arc (red when turning left) -->
-                                        <path d="M 50 10 A 40 40 0 0 0 10 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigB-leftArc"/>
+                                        <!-- Outer ring -->
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#2a2f3e" stroke-width="8"/>
 
-                                        <!-- Right arc (blue when turning right) -->
-                                        <path d="M 50 10 A 40 40 0 0 1 90 50" fill="none" stroke="#3a3f4e" stroke-width="6" id="rigB-rightArc"/>
+                                        <!-- Steering wheel with rotation -->
+                                        <g id="rigB-wheelRotate">
+                                            <!-- Wheel rim -->
+                                            <circle cx="60" cy="60" r="35" fill="url(#wheelGradientB)" stroke="#1a202c" stroke-width="3"/>
 
-                                        <!-- Center dot -->
-                                        <circle cx="50" cy="50" r="5" fill="white"/>
+                                            <!-- Spokes -->
+                                            <line x1="60" y1="30" x2="60" y2="90" stroke="#1a202c" stroke-width="4"/>
+                                            <line x1="30" y1="60" x2="90" y2="60" stroke="#1a202c" stroke-width="4"/>
 
-                                        <!-- Steering needle -->
-                                        <line x1="50" y1="50" x2="50" y2="15"
-                                              stroke="white" stroke-width="3" stroke-linecap="round"
-                                              id="rigB-steeringNeedle"/>
+                                            <!-- Center hub -->
+                                            <circle cx="60" cy="60" r="10" fill="#1a202c" stroke="#4a5568" stroke-width="2"/>
+
+                                            <!-- Top marker (12 o'clock position) -->
+                                            <circle cx="60" cy="30" r="4" fill="#FFB740"/>
+                                        </g>
                                     </svg>
-                                    <div class="steering-labels">
-                                        <span>L</span>
-                                        <span>0</span>
-                                        <span>R</span>
+
+                                    <!-- Direction indicators -->
+                                    <div class="steering-indicators">
+                                        <div class="steer-indicator left" id="rigB-steerLeft">L</div>
+                                        <div class="steer-indicator right" id="rigB-steerRight">R</div>
                                     </div>
                                 </div>
                                 <span class="input-value" id="rigB-steer">0°</span>

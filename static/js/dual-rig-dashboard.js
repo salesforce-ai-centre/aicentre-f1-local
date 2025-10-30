@@ -240,40 +240,37 @@ function updateRPMBar(id, rpm) {
 }
 
 /**
- * Update circular steering gauge (-1.0 = full left, 0 = center, +1.0 = full right)
+ * Update steering wheel rotation and indicators
+ * steerValue: -1.0 = full left, 0 = center, +1.0 = full right
  */
 function updateSteeringGauge(prefix, steerValue) {
-    const needle = document.getElementById(`${prefix}-steeringNeedle`);
-    const leftArc = document.getElementById(`${prefix}-leftArc`);
-    const rightArc = document.getElementById(`${prefix}-rightArc`);
+    const wheelRotate = document.getElementById(`${prefix}-wheelRotate`);
+    const leftIndicator = document.getElementById(`${prefix}-steerLeft`);
+    const rightIndicator = document.getElementById(`${prefix}-steerRight`);
 
-    if (!needle || !leftArc || !rightArc) return;
+    if (!wheelRotate || !leftIndicator || !rightIndicator) return;
 
-    // Rotate needle: -90° (full left) to +90° (full right)
-    const angle = steerValue * 90;
-    needle.setAttribute('transform', `rotate(${angle} 50 50)`);
+    // Rotate wheel: -450° (full left) to +450° (full right) for dramatic effect
+    // This gives 1.25 full rotations in each direction
+    const angle = steerValue * 450;
 
-    // Highlight arcs based on direction
+    // Use CSS transform with proper transform-origin instead of SVG transform attribute
+    wheelRotate.style.transform = `rotate(${angle}deg)`;
+    wheelRotate.style.transformOrigin = 'center';
+
+    // Update direction indicators
     if (steerValue < -0.05) {
-        // Turning left - highlight left arc in red
-        const intensity = Math.abs(steerValue);
-        leftArc.setAttribute('stroke', `rgba(230, 57, 70, ${0.3 + intensity * 0.7})`);
-        leftArc.setAttribute('stroke-width', '8');
-        rightArc.setAttribute('stroke', '#3a3f4e');
-        rightArc.setAttribute('stroke-width', '6');
+        // Turning left
+        leftIndicator.classList.add('active');
+        rightIndicator.classList.remove('active');
     } else if (steerValue > 0.05) {
-        // Turning right - highlight right arc in blue
-        const intensity = Math.abs(steerValue);
-        rightArc.setAttribute('stroke', `rgba(0, 119, 182, ${0.3 + intensity * 0.7})`);
-        rightArc.setAttribute('stroke-width', '8');
-        leftArc.setAttribute('stroke', '#3a3f4e');
-        leftArc.setAttribute('stroke-width', '6');
+        // Turning right
+        rightIndicator.classList.add('active');
+        leftIndicator.classList.remove('active');
     } else {
-        // Center - both arcs dim
-        leftArc.setAttribute('stroke', '#3a3f4e');
-        leftArc.setAttribute('stroke-width', '6');
-        rightArc.setAttribute('stroke', '#3a3f4e');
-        rightArc.setAttribute('stroke-width', '6');
+        // Center - both off
+        leftIndicator.classList.remove('active');
+        rightIndicator.classList.remove('active');
     }
 }
 
@@ -367,8 +364,12 @@ function checkDataFreshness() {
 /**
  * Update rig status indicator
  */
-function updateRigStatus(rigId, message, color) {
-    const prefix = rigId === 'RIG_A' ? 'rigA' : 'rigB';
+function updateRigStatus(rigIdOrPrefix, message, color) {
+    // Accept either rigId (RIG_A/RIG_B) or prefix (rigA/rigB)
+    const prefix = rigIdOrPrefix.includes('RIG_')
+        ? (rigIdOrPrefix === 'RIG_A' ? 'rigA' : 'rigB')
+        : rigIdOrPrefix;
+
     const statusElement = document.getElementById(`${prefix}Status`);
     if (statusElement) {
         statusElement.textContent = message;

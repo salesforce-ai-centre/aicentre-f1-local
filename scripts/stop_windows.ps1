@@ -29,7 +29,7 @@ if (Test-Path ".pids.json") {
                     if ($process) {
                         Write-Host "Stopping $name (PID: $pid)..." -ForegroundColor Yellow
                         Stop-Process -Id $pid -Force
-                        Write-Host "  ✓ Stopped" -ForegroundColor Green
+                        Write-Host "  Stopped" -ForegroundColor Green
                     }
                 } catch {
                     Write-Host "  ! Process $pid not found" -ForegroundColor Gray
