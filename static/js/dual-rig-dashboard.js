@@ -183,10 +183,8 @@ function updateRigDisplay(rigId, data) {
     }
 
     // Lap data (packet ID 2)
-    // Check both 'carPosition' (simulator) and 'position' (real receiver)
-    const position = data.carPosition !== undefined ? data.carPosition : data.position;
-    if (position !== undefined) {
-        updateElement(`${prefix}-position`, position);
+    if (data.position !== undefined) {
+        updateElement(`${prefix}-position`, data.position);
     }
 
     if (data.currentLapNum !== undefined) {

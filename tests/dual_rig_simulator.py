@@ -62,7 +62,7 @@ def simulate_rig_data(rig_id, lap_num, session_uid):
         ],
 
         # Position and lap
-        'carPosition': random.randint(1, 5),
+        'position': random.randint(1, 5),
         'currentLapNum': lap_num,
         'currentLapTimeInMS': random.randint(30000, 90000),
         'lastLapTimeInMS': lap_time if lap_num > 1 else 0,
