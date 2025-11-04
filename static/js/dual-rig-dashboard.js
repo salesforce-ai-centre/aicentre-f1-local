@@ -494,25 +494,25 @@ function initLeaderboard() {
     }
 
     // Add test session best times (only if no real data exists)
-    if (!leaderboardState.RIG_A.sessionBest) {
-        leaderboardState.RIG_A.sessionBest = {
-            lapTime: 78950,
-            lapNum: 12,
-            trackName: 'Silverstone',
-            sessionUID: 'TEST_SESSION_A',
-            timestamp: Date.now()
-        };
-    }
+    // if (!leaderboardState.RIG_A.sessionBest) {
+    //     leaderboardState.RIG_A.sessionBest = {
+    //         lapTime: 78950,
+    //         lapNum: 12,
+    //         trackName: 'Silverstone',
+    //         sessionUID: 'TEST_SESSION_A',
+    //         timestamp: Date.now()
+    //     };
+    // }
 
-    if (!leaderboardState.RIG_B.sessionBest) {
-        leaderboardState.RIG_B.sessionBest = {
-            lapTime: 77650,  // Faster than RIG_A
-            lapNum: 9,
-            trackName: 'Silverstone',
-            sessionUID: 'TEST_SESSION_B',
-            timestamp: Date.now()
-        };
-    }
+    // if (!leaderboardState.RIG_B.sessionBest) {
+    //     leaderboardState.RIG_B.sessionBest = {
+    //         lapTime: 77650,  // Faster than RIG_A
+    //         lapNum: 9,
+    //         trackName: 'Silverstone',
+    //         sessionUID: 'TEST_SESSION_B',
+    //         timestamp: Date.now()
+    //     };
+    // }
 
     // Setup button handlers
     setupLeaderboardControls();
@@ -642,7 +642,7 @@ function updateSessionBestDisplay(rigId = null, isNewBest = false) {
         playerElement.textContent = fastestEntry.playerName;
 
         // Update rig badge
-        const rigLabel = fastestEntry.rigId === 'RIG_A' ? '🔴 Sim Rig 1' : '🔵 Sim Rig 2';
+        const rigLabel = fastestEntry.rigId === 'RIG_A' ? '🔴 Simulator 1' : '🔵 Simulator 2';
         const rigClass = fastestEntry.rigId === 'RIG_A' ? 'rig-a' : 'rig-b';
         rigBadgeElement.textContent = rigLabel;
         rigBadgeElement.className = `session-best-rig-badge ${rigClass}`;
@@ -843,7 +843,7 @@ function saveToLeaderboard(rigId, playerName) {
  */
 function resetCurrentSession(rigId = null) {
     const message = rigId && rigId !== 'BOTH'
-        ? `Reset current session best for ${rigId === 'RIG_A' ? 'Sim Rig 1' : 'Sim Rig 2'}?`
+        ? `Reset current session best for ${rigId === 'RIG_A' ? 'Simulator 1' : 'Simulator 2'}?`
         : 'Reset current session best laps for both rigs?';
 
     if (!confirm(message + ' This will clear the temporary session data but keep saved leaderboard entries.')) {
