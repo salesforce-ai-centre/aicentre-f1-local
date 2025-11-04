@@ -431,4 +431,651 @@ function updateTyreWear(id, wearValue) {
     }
 }
 
+// ===========================
+// LEADERBOARD FUNCTIONALITY
+// ===========================
+
+// Leaderboard state
+const leaderboardState = {
+    RIG_A: {
+        sessionBest: null,  // { lapTime, lapNum, trackName, sessionUID }
+        savedLaps: []       // Array of saved best laps with player names
+    },
+    RIG_B: {
+        sessionBest: null,
+        savedLaps: []
+    },
+    viewMode: 'combined'  // 'combined' or 'split'
+};
+
+// localStorage keys
+const STORAGE_KEY_RIG_A = 'f1_leaderboard_RIG_A';
+const STORAGE_KEY_RIG_B = 'f1_leaderboard_RIG_B';
+const STORAGE_KEY_VIEW_MODE = 'f1_leaderboard_viewMode';
+
+/**
+ * Initialize leaderboard from localStorage
+ */
+function initLeaderboard() {
+    console.log('Initializing leaderboard...');
+
+    // Load RIG_A leaderboard
+    try {
+        const rigAData = localStorage.getItem(STORAGE_KEY_RIG_A);
+        if (rigAData) {
+            leaderboardState.RIG_A.savedLaps = JSON.parse(rigAData);
+            console.log(`Loaded ${leaderboardState.RIG_A.savedLaps.length} RIG_A entries from localStorage`);
+        }
+    } catch (error) {
+        console.error('Error loading RIG_A leaderboard:', error);
+        leaderboardState.RIG_A.savedLaps = [];
+    }
+
+    // Load RIG_B leaderboard
+    try {
+        const rigBData = localStorage.getItem(STORAGE_KEY_RIG_B);
+        if (rigBData) {
+            leaderboardState.RIG_B.savedLaps = JSON.parse(rigBData);
+            console.log(`Loaded ${leaderboardState.RIG_B.savedLaps.length} RIG_B entries from localStorage`);
+        }
+    } catch (error) {
+        console.error('Error loading RIG_B leaderboard:', error);
+        leaderboardState.RIG_B.savedLaps = [];
+    }
+
+    // Load view mode preference
+    try {
+        const viewMode = localStorage.getItem(STORAGE_KEY_VIEW_MODE);
+        if (viewMode) {
+            leaderboardState.viewMode = viewMode;
+        }
+    } catch (error) {
+        console.error('Error loading view mode:', error);
+    }
+
+    // Add test session best times (only if no real data exists)
+    if (!leaderboardState.RIG_A.sessionBest) {
+        leaderboardState.RIG_A.sessionBest = {
+            lapTime: 78950,
+            lapNum: 12,
+            trackName: 'Silverstone',
+            sessionUID: 'TEST_SESSION_A',
+            timestamp: Date.now()
+        };
+    }
+
+    if (!leaderboardState.RIG_B.sessionBest) {
+        leaderboardState.RIG_B.sessionBest = {
+            lapTime: 77650,  // Faster than RIG_A
+            lapNum: 9,
+            trackName: 'Silverstone',
+            sessionUID: 'TEST_SESSION_B',
+            timestamp: Date.now()
+        };
+    }
+
+    // Setup button handlers
+    setupLeaderboardControls();
+
+    // Apply initial view mode
+    applyViewMode(leaderboardState.viewMode);
+}
+
+/**
+ * Setup button event handlers
+ */
+function setupLeaderboardControls() {
+    // View toggle button
+    const viewToggleBtn = document.getElementById('viewToggleBtn');
+
+    // Combined view buttons
+    const saveSessionBtn = document.getElementById('saveSessionBtn');
+    const resetCurrentBtn = document.getElementById('resetCurrentBtn');
+
+    // Split view buttons
+    const saveSessionBtnSplit = document.getElementById('saveSessionBtnSplit');
+    const resetCurrentBtnSplit = document.getElementById('resetCurrentBtnSplit');
+
+    // Modal buttons
+    const confirmSaveBtn = document.getElementById('confirmSaveBtn');
+    const cancelSaveBtn = document.getElementById('cancelSaveBtn');
+
+    if (viewToggleBtn) {
+        viewToggleBtn.addEventListener('click', toggleViewMode);
+    }
+
+    // Combined view button handlers
+    if (saveSessionBtn) {
+        saveSessionBtn.addEventListener('click', () => showSaveSessionModal('BOTH'));
+    }
+
+    if (resetCurrentBtn) {
+        resetCurrentBtn.addEventListener('click', () => resetCurrentSession('BOTH'));
+    }
+
+    // Split view button handlers
+    if (saveSessionBtnSplit) {
+        saveSessionBtnSplit.addEventListener('click', () => showSaveSessionModal('BOTH'));
+    }
+
+    if (resetCurrentBtnSplit) {
+        resetCurrentBtnSplit.addEventListener('click', () => resetCurrentSession('BOTH'));
+    }
+
+    // Modal handlers
+    if (confirmSaveBtn) {
+        confirmSaveBtn.addEventListener('click', confirmSaveSession);
+    }
+
+    if (cancelSaveBtn) {
+        cancelSaveBtn.addEventListener('click', closeSaveSessionModal);
+    }
+}
+
+/**
+ * Track lap times and update session best
+ */
+function trackLapTime(rigId, data) {
+    // Only track valid completed laps
+    if (!data.lastLapTimeInMS || data.lastLapTimeInMS <= 0) return;
+    if (data.currentLapInvalid) return;
+
+    const state = leaderboardState[rigId];
+    const currentLapTime = data.lastLapTimeInMS;
+
+    // Check if this is a new session best
+    if (!state.sessionBest || currentLapTime < state.sessionBest.lapTime) {
+        const previousBest = state.sessionBest ? state.sessionBest.lapTime : null;
+
+        state.sessionBest = {
+            lapTime: currentLapTime,
+            lapNum: data.currentLapNum - 1,  // Last lap was previous lap number
+            trackName: data.trackName || 'Unknown Track',
+            sessionUID: data.sessionUID,
+            timestamp: Date.now()
+        };
+
+        console.log(`[${rigId}] New session best: ${formatLapTime(currentLapTime)} (Lap ${state.sessionBest.lapNum})`);
+
+        // Update display with animation based on current view mode
+        if (leaderboardState.viewMode === 'combined') {
+            updateSessionBestDisplay(rigId, true);
+        } else {
+            updateSessionBestDisplaySplit(rigId, true);
+        }
+
+        // Calculate improvement
+        if (previousBest) {
+            const improvement = previousBest - currentLapTime;
+            console.log(`[${rigId}] Improved by ${formatLapTime(improvement)}`);
+        }
+    }
+}
+
+/**
+ * Update session best lap display (for combined view - shows overall fastest from leaderboard)
+ */
+function updateSessionBestDisplay(rigId = null, isNewBest = false) {
+    const timeElement = document.getElementById('overallSessionBest');
+    const rigBadgeElement = document.getElementById('overallSessionBestRig');
+    const lapElement = document.getElementById('overallSessionBestLap');
+    const playerElement = document.getElementById('overallSessionBestPlayer');
+
+    if (!timeElement || !rigBadgeElement || !lapElement || !playerElement) return;
+
+    // Combine all saved laps from both rigs
+    const allSavedLaps = [
+        ...leaderboardState.RIG_A.savedLaps.map(lap => ({ ...lap, rigId: 'RIG_A' })),
+        ...leaderboardState.RIG_B.savedLaps.map(lap => ({ ...lap, rigId: 'RIG_B' }))
+    ];
+
+    // Sort by lap time to find the fastest
+    allSavedLaps.sort((a, b) => a.lapTime - b.lapTime);
+
+    // Get the fastest saved lap
+    if (allSavedLaps.length > 0) {
+        const fastestEntry = allSavedLaps[0];
+
+        // Display all data from the fastest saved lap
+        timeElement.textContent = formatLapTime(fastestEntry.lapTime);
+        lapElement.textContent = `Lap ${fastestEntry.lapNum}`;
+        playerElement.textContent = fastestEntry.playerName;
+
+        // Update rig badge
+        const rigLabel = fastestEntry.rigId === 'RIG_A' ? '🔴 Sim Rig 1' : '🔵 Sim Rig 2';
+        const rigClass = fastestEntry.rigId === 'RIG_A' ? 'rig-a' : 'rig-b';
+        rigBadgeElement.textContent = rigLabel;
+        rigBadgeElement.className = `session-best-rig-badge ${rigClass}`;
+
+        // Flash animation for new best
+        if (isNewBest) {
+            timeElement.classList.add('new-best');
+            setTimeout(() => {
+                timeElement.classList.remove('new-best');
+            }, 1000);
+        }
+    } else {
+        timeElement.textContent = '--:--.---';
+        lapElement.textContent = 'Lap --';
+        playerElement.textContent = '--';
+        rigBadgeElement.textContent = '';
+        rigBadgeElement.className = 'session-best-rig-badge';
+    }
+}
+
+/**
+ * Update session best lap display (for split view)
+ */
+function updateSessionBestDisplaySplit(rigId, isNewBest = false) {
+    const prefix = rigId === 'RIG_A' ? 'rigA' : 'rigB';
+    const state = leaderboardState[rigId];
+
+    const timeElement = document.getElementById(`${prefix}-sessionBestSplit`);
+    const lapElement = document.getElementById(`${prefix}-sessionBestLapSplit`);
+
+    if (!timeElement || !lapElement) return;
+
+    if (state.sessionBest) {
+        const formattedTime = formatLapTime(state.sessionBest.lapTime);
+        timeElement.textContent = formattedTime;
+        lapElement.textContent = `Lap ${state.sessionBest.lapNum}`;
+
+        // Flash animation for new best
+        if (isNewBest) {
+            timeElement.classList.add('new-best');
+            setTimeout(() => {
+                timeElement.classList.remove('new-best');
+            }, 1000);
+        }
+    } else {
+        timeElement.textContent = '--:--.---';
+        lapElement.textContent = 'Lap --';
+    }
+}
+
+/**
+ * Show modal to save session
+ */
+function showSaveSessionModal(rigId = null) {
+    // If rigId specified, only save that rig
+    // Otherwise show modal for both rigs
+    const hasRigABest = leaderboardState.RIG_A.sessionBest !== null;
+    const hasRigBBest = leaderboardState.RIG_B.sessionBest !== null;
+
+    // If specific rig requested, check if it has a best lap
+    if (rigId === 'RIG_A' && !hasRigABest) {
+        alert('No session best lap for Rig 1. Complete at least one valid lap first.');
+        return;
+    }
+    if (rigId === 'RIG_B' && !hasRigBBest) {
+        alert('No session best lap for Rig 2. Complete at least one valid lap first.');
+        return;
+    }
+
+    // If no rig specified and neither has a best, warn
+    if (!rigId && !hasRigABest && !hasRigBBest) {
+        alert('No session best laps to save. Complete at least one valid lap first.');
+        return;
+    }
+
+    const modal = document.getElementById('playerNameModal');
+    const rigAInput = document.getElementById('rigA-playerName');
+    const rigBInput = document.getElementById('rigB-playerName');
+    const rigABestTime = document.getElementById('rigA-modalBestTime');
+    const rigBBestTime = document.getElementById('rigB-modalBestTime');
+
+    // Pre-fill with current driver names from the dashboard
+    const rigADriver = document.getElementById('rigADriver');
+    const rigBDriver = document.getElementById('rigBDriver');
+
+    if (rigAInput && rigADriver) {
+        rigAInput.value = rigADriver.textContent || 'Player 1';
+    }
+    if (rigBInput && rigBDriver) {
+        rigBInput.value = rigBDriver.textContent || 'Player 2';
+    }
+
+    // Show best times
+    if (rigABestTime) {
+        rigABestTime.textContent = hasRigABest
+            ? formatLapTime(leaderboardState.RIG_A.sessionBest.lapTime)
+            : 'No lap completed';
+    }
+    if (rigBBestTime) {
+        rigBBestTime.textContent = hasRigBBest
+            ? formatLapTime(leaderboardState.RIG_B.sessionBest.lapTime)
+            : 'No lap completed';
+    }
+
+    // Store which rig(s) to save
+    modal.dataset.saveRigId = rigId || 'BOTH';
+
+    // Show modal
+    if (modal) {
+        modal.classList.add('show');
+    }
+}
+
+/**
+ * Close save session modal
+ */
+function closeSaveSessionModal() {
+    const modal = document.getElementById('playerNameModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+/**
+ * Confirm and save session to leaderboard
+ */
+function confirmSaveSession() {
+    const modal = document.getElementById('playerNameModal');
+    const saveRigId = modal ? modal.dataset.saveRigId : 'BOTH';
+    const rigAInput = document.getElementById('rigA-playerName');
+    const rigBInput = document.getElementById('rigB-playerName');
+
+    // Save based on which rig(s) were requested
+    if ((saveRigId === 'BOTH' || saveRigId === 'RIG_A') && leaderboardState.RIG_A.sessionBest && rigAInput) {
+        const playerName = rigAInput.value.trim() || 'Anonymous';
+        saveToLeaderboard('RIG_A', playerName);
+    }
+
+    if ((saveRigId === 'BOTH' || saveRigId === 'RIG_B') && leaderboardState.RIG_B.sessionBest && rigBInput) {
+        const playerName = rigBInput.value.trim() || 'Anonymous';
+        saveToLeaderboard('RIG_B', playerName);
+    }
+
+    closeSaveSessionModal();
+}
+
+/**
+ * Save session best to leaderboard
+ */
+function saveToLeaderboard(rigId, playerName) {
+    const state = leaderboardState[rigId];
+
+    if (!state.sessionBest) {
+        console.warn(`[${rigId}] No session best to save`);
+        return;
+    }
+
+    const entry = {
+        playerName: playerName,
+        lapTime: state.sessionBest.lapTime,
+        lapNum: state.sessionBest.lapNum,
+        trackName: state.sessionBest.trackName,
+        sessionUID: state.sessionBest.sessionUID,
+        timestamp: Date.now(),
+        saved: true
+    };
+
+    // Add to saved laps
+    state.savedLaps.push(entry);
+
+    // Sort by lap time (fastest first)
+    state.savedLaps.sort((a, b) => a.lapTime - b.lapTime);
+
+    // Keep only top 10
+    if (state.savedLaps.length > 10) {
+        state.savedLaps = state.savedLaps.slice(0, 10);
+    }
+
+    // Save to localStorage
+    const storageKey = rigId === 'RIG_A' ? STORAGE_KEY_RIG_A : STORAGE_KEY_RIG_B;
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(state.savedLaps));
+        console.log(`[${rigId}] Saved ${playerName}'s lap to leaderboard: ${formatLapTime(entry.lapTime)}`);
+    } catch (error) {
+        console.error(`Error saving ${rigId} leaderboard:`, error);
+    }
+
+    // Render updated leaderboard based on current view mode
+    if (leaderboardState.viewMode === 'combined') {
+        renderCombinedLeaderboard();
+    } else {
+        renderLeaderboard(rigId);
+    }
+}
+
+/**
+ * Reset current session best laps
+ */
+function resetCurrentSession(rigId = null) {
+    const message = rigId && rigId !== 'BOTH'
+        ? `Reset current session best for ${rigId === 'RIG_A' ? 'Sim Rig 1' : 'Sim Rig 2'}?`
+        : 'Reset current session best laps for both rigs?';
+
+    if (!confirm(message + ' This will clear the temporary session data but keep saved leaderboard entries.')) {
+        return;
+    }
+
+    if (!rigId || rigId === 'BOTH' || rigId === 'RIG_A') {
+        leaderboardState.RIG_A.sessionBest = null;
+    }
+
+    if (!rigId || rigId === 'BOTH' || rigId === 'RIG_B') {
+        leaderboardState.RIG_B.sessionBest = null;
+    }
+
+    // Update display based on current view mode
+    if (leaderboardState.viewMode === 'combined') {
+        updateSessionBestDisplay();
+    } else {
+        updateSessionBestDisplaySplit('RIG_A');
+        updateSessionBestDisplaySplit('RIG_B');
+    }
+
+    console.log(`Current session best laps reset${rigId && rigId !== 'BOTH' ? ' for ' + rigId : ''}`);
+}
+
+/**
+ * Render leaderboard entries (compact version)
+ */
+function renderLeaderboard(rigId) {
+    const prefix = rigId === 'RIG_A' ? 'rigA' : 'rigB';
+    const container = document.getElementById(`${prefix}-leaderboardEntries`);
+
+    if (!container) return;
+
+    const state = leaderboardState[rigId];
+
+    // Clear existing entries
+    container.innerHTML = '';
+
+    if (state.savedLaps.length === 0) {
+        container.innerHTML = '<div class="no-data-compact">No saved laps</div>';
+        return;
+    }
+
+    // Render each entry (compact format)
+    state.savedLaps.forEach((entry, index) => {
+        const rank = index + 1;
+        const entryDiv = document.createElement('div');
+        entryDiv.className = `leaderboard-entry-compact rank-${rank}`;
+        entryDiv.dataset.rigId = rigId;
+        entryDiv.dataset.index = index;
+        entryDiv.onclick = () => editPlayerName(rigId, index);
+
+        entryDiv.innerHTML = `
+            <div class="entry-compact-left">
+                <div class="entry-rank-compact">${rank}</div>
+                <div class="entry-player-compact" title="${entry.playerName} - ${entry.trackName}">${entry.playerName}</div>
+            </div>
+            <div class="entry-time-compact">${formatLapTime(entry.lapTime)}</div>
+        `;
+
+        container.appendChild(entryDiv);
+    });
+}
+
+/**
+ * Edit player name inline
+ */
+function editPlayerName(rigId, index) {
+    const state = leaderboardState[rigId];
+    const entry = state.savedLaps[index];
+
+    if (!entry) return;
+
+    const newName = prompt('Edit player name:', entry.playerName);
+
+    if (newName !== null && newName.trim() !== '') {
+        entry.playerName = newName.trim();
+
+        // Save to localStorage
+        const storageKey = rigId === 'RIG_A' ? STORAGE_KEY_RIG_A : STORAGE_KEY_RIG_B;
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(state.savedLaps));
+            console.log(`[${rigId}] Updated player name to: ${entry.playerName}`);
+        } catch (error) {
+            console.error(`Error updating ${rigId} leaderboard:`, error);
+        }
+
+        // Re-render leaderboard based on current view mode
+        if (leaderboardState.viewMode === 'combined') {
+            renderCombinedLeaderboard();
+        } else {
+            renderLeaderboard(rigId);
+        }
+    }
+}
+
+/**
+ * Toggle between combined and split view
+ */
+function toggleViewMode() {
+    const newMode = leaderboardState.viewMode === 'combined' ? 'split' : 'combined';
+    applyViewMode(newMode);
+
+    // Save preference
+    try {
+        localStorage.setItem(STORAGE_KEY_VIEW_MODE, newMode);
+    } catch (error) {
+        console.error('Error saving view mode:', error);
+    }
+}
+
+/**
+ * Apply view mode
+ */
+function applyViewMode(mode) {
+    leaderboardState.viewMode = mode;
+
+    const viewToggleBtn = document.getElementById('viewToggleBtn');
+    const combinedView = document.getElementById('combinedLeaderboard');
+    const splitView = document.getElementById('splitLeaderboard');
+
+    if (mode === 'combined') {
+        // Show combined view, hide split view
+        if (combinedView) combinedView.style.display = 'flex';
+        if (splitView) splitView.style.display = 'none';
+        if (viewToggleBtn) viewToggleBtn.textContent = 'Split';
+
+        // Update overall session best display
+        updateSessionBestDisplay();
+
+        // Render combined leaderboard
+        renderCombinedLeaderboard();
+    } else {
+        // Show split view, hide combined view
+        if (combinedView) combinedView.style.display = 'none';
+        if (splitView) splitView.style.display = 'flex';
+        if (viewToggleBtn) viewToggleBtn.textContent = 'Combined';
+
+        // Update session bests for split view
+        updateSessionBestDisplaySplit('RIG_A');
+        updateSessionBestDisplaySplit('RIG_B');
+
+        // Render individual leaderboards
+        renderLeaderboard('RIG_A');
+        renderLeaderboard('RIG_B');
+    }
+}
+
+/**
+ * Render combined leaderboard (both rigs)
+ */
+function renderCombinedLeaderboard() {
+    const container = document.getElementById('combinedLeaderboardEntries');
+    if (!container) return;
+
+    // Combine and sort all laps from both rigs
+    const allLaps = [];
+
+    leaderboardState.RIG_A.savedLaps.forEach(lap => {
+        allLaps.push({ ...lap, rigId: 'RIG_A', rigName: 'Rig 1' });
+    });
+
+    leaderboardState.RIG_B.savedLaps.forEach(lap => {
+        allLaps.push({ ...lap, rigId: 'RIG_B', rigName: 'Rig 2' });
+    });
+
+    // Sort by lap time (fastest first)
+    allLaps.sort((a, b) => a.lapTime - b.lapTime);
+
+    // Clear existing entries
+    container.innerHTML = '';
+
+    if (allLaps.length === 0) {
+        container.innerHTML = '<div class="no-data">No saved laps</div>';
+        return;
+    }
+
+    // Render combined entries
+    allLaps.forEach((entry, index) => {
+        const rank = index + 1;
+        const entryDiv = document.createElement('div');
+        entryDiv.className = `combined-entry rank-${rank}`;
+        entryDiv.dataset.rigId = entry.rigId;
+        entryDiv.onclick = () => {
+            // Find the index in the original rig's savedLaps
+            const rigState = leaderboardState[entry.rigId];
+            const originalIndex = rigState.savedLaps.findIndex(lap =>
+                lap.lapTime === entry.lapTime && lap.playerName === entry.playerName
+            );
+            if (originalIndex !== -1) {
+                editPlayerName(entry.rigId, originalIndex);
+            }
+        };
+
+        const rigBadgeClass = entry.rigId === 'RIG_A' ? 'rig-a' : 'rig-b';
+        const rigLabel = entry.rigId === 'RIG_A' ? 'R1' : 'R2';
+
+        entryDiv.innerHTML = `
+            <div class="combined-entry-left">
+                <div class="entry-rank-compact">${rank}</div>
+                <div class="combined-entry-rig-badge ${rigBadgeClass}">${rigLabel}</div>
+                <div class="entry-player-compact" title="${entry.playerName} - ${entry.trackName} - ${entry.rigName}">${entry.playerName}</div>
+            </div>
+            <div class="entry-time-compact">${formatLapTime(entry.lapTime)}</div>
+        `;
+
+        container.appendChild(entryDiv);
+    });
+}
+
+// Make editPlayerName globally accessible
+window.editPlayerName = editPlayerName;
+
+// Initialize leaderboard on page load
+document.addEventListener('DOMContentLoaded', initLeaderboard);
+
+// Update telemetry handler to track lap times
+const originalTelemetryHandler = socket._callbacks['$telemetry_update'] || [];
+socket.on('telemetry_update', (data) => {
+    const rigId = data.rig_id;
+    if (!rigId) return;
+
+    // Track lap times for leaderboard
+    trackLapTime(rigId, data);
+
+    // Update session best display based on current view mode
+    if (leaderboardState.viewMode === 'combined') {
+        updateSessionBestDisplay();
+    } else {
+        updateSessionBestDisplaySplit(rigId);
+    }
+});
+
 console.log('✓ Dual-rig dashboard ready');
