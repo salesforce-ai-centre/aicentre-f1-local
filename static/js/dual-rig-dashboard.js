@@ -194,7 +194,9 @@ function updateRigDisplay(rigId, data) {
 
     // Lap data (packet ID 2)
     if (data.position !== undefined) {
-        updateElement(`${prefix}-position`, data.position);
+        // Position 0 means not set (qualifying/practice/garage), show as '--'
+        const positionDisplay = data.position === 0 ? '--' : data.position;
+        updateElement(`${prefix}-position`, positionDisplay);
     }
 
     if (data.currentLapNum !== undefined) {

@@ -221,13 +221,15 @@ class F1TelemetryReceiverMulti:
                        f"Invalid: {player_lap.m_currentLapInvalid}")
 
         # Validate and sanitize position (should be 1-22 for F1 25, already 1-indexed per UDP spec)
-        # If out of range, it's likely corrupt data
+        # Position can be 0 in qualifying, practice, or when in garage - don't reject packet
         position = player_lap.m_carPosition
-        if position < 1 or position > 22:  # Valid range is 1-22
-            logger.warning(f"[{self.rig_id}] ❌ Invalid position data: {position} (expected 1-22, format: {header.m_packetFormat})")
-            logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={player_lap.m_currentLapNum}, "
-                        f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
-            return
+        if position < 0 or position > 22:  # Valid range is 0-22 (0 = not set/invalid)
+            logger.warning(f"[{self.rig_id}] ❌ Out of range position: {position} (expected 0-22, format: {header.m_packetFormat})")
+            position = 0  # Set to 0 as fallback
+        elif position == 0:
+            # Position 0 is valid for practice/qualifying/garage - just log occasionally
+            if self.packet_count % 300 == 0:  # Log every 5 seconds
+                logger.debug(f"[{self.rig_id}] Position is 0 (practice/qualifying/garage mode)")
 
         # Validate lap number (should be reasonable, e.g., 1-200)
         lap_num = player_lap.m_currentLapNum
