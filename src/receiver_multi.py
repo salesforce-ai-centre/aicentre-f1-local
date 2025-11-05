@@ -210,11 +210,21 @@ class F1TelemetryReceiverMulti:
 
         player_lap = packet.m_lapData[player_index]
 
+        # Debug: Log raw UDP values every 60 packets (~1 per second at 60Hz)
+        if self.packet_count % 60 == 0:
+            logger.info(f"[{self.rig_id}] 📥 RAW UDP DATA - Position: {player_lap.m_carPosition}, "
+                       f"Lap: {player_lap.m_currentLapNum}, "
+                       f"CurrentLapTimeMS: {player_lap.m_currentLapTimeInMS}, "
+                       f"LastLapTimeMS: {player_lap.m_lastLapTimeInMS}, "
+                       f"LapDistance: {player_lap.m_lapDistance:.1f}m, "
+                       f"Sector: {player_lap.m_sector}, "
+                       f"Invalid: {player_lap.m_currentLapInvalid}")
+
         # Validate and sanitize position (should be 1-22 for F1 25, already 1-indexed per UDP spec)
         # If out of range, it's likely corrupt data
         position = player_lap.m_carPosition
         if position < 1 or position > 22:  # Valid range is 1-22
-            logger.warning(f"[{self.rig_id}] Invalid position data: {position} (expected 1-22, format: {header.m_packetFormat})")
+            logger.warning(f"[{self.rig_id}] ❌ Invalid position data: {position} (expected 1-22, format: {header.m_packetFormat})")
             logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={player_lap.m_currentLapNum}, "
                         f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
             return
@@ -271,7 +281,8 @@ class F1TelemetryReceiverMulti:
         # Use the persistent validated lap time (continues to be sent until next lap completion)
         validated_last_lap_time = getattr(self, 'validated_last_lap_time', None)
 
-        self._send_callback({
+        # Prepare data to send
+        data_to_send = {
             'packetId': PACKET_ID_LAP_DATA,
             'sessionUID': header.m_sessionUID,
             'sessionTime': header.m_sessionTime,
@@ -288,7 +299,17 @@ class F1TelemetryReceiverMulti:
             'pitStatus': player_lap.m_pitStatus,
             'lapDistance': player_lap.m_lapDistance,
             'lapCompleted': self.lap_just_completed,  # Add lap completion flag
-        })
+        }
+
+        # Debug: Log data being sent every 60 packets (~1 per second at 60Hz)
+        if self.packet_count % 60 == 0:
+            logger.info(f"[{self.rig_id}] 📤 SENDING TO FRONTEND - Position: {data_to_send['position']}, "
+                       f"Lap: {data_to_send['currentLapNum']}, "
+                       f"CurrentLapTimeMS: {data_to_send['currentLapTimeInMS']}, "
+                       f"LastLapTimeMS: {data_to_send['lastLapTimeInMS']}, "
+                       f"LapDistance: {data_to_send['lapDistance']:.1f}m")
+
+        self._send_callback(data_to_send)
 
         # Reset lap completion flag after sending
         if self.lap_just_completed:
