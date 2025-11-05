@@ -90,6 +90,16 @@ function updateRigDisplay(rigId, data) {
     // Track and session type
     if (data.trackName) {
         updateElement(`${prefix}-trackName`, data.trackName);
+
+        // Update track map if it's showing and track changed
+        if (leaderboardState.showTrackMap && data.trackName !== currentTrackName) {
+            renderTrackMap(data.trackName);
+        }
+    }
+
+    // Update car position on track map (uses lapDistance from lap data packet)
+    if (data.lapDistance !== undefined && leaderboardState.showTrackMap) {
+        updateCarPosition(rigId, data.lapDistance);
     }
 
     if (data.sessionTypeName) {
@@ -445,7 +455,8 @@ const leaderboardState = {
         sessionBest: null,
         savedLaps: []
     },
-    viewMode: 'combined'  // 'combined' or 'split'
+    viewMode: 'combined',  // 'combined' or 'split'
+    showTrackMap: false    // Toggle between leaderboard and track map
 };
 
 // localStorage keys
@@ -525,8 +536,9 @@ function initLeaderboard() {
  * Setup button event handlers
  */
 function setupLeaderboardControls() {
-    // View toggle button
+    // View toggle buttons
     const viewToggleBtn = document.getElementById('viewToggleBtn');
+    const mapToggleBtn = document.getElementById('mapToggleBtn');
 
     // Combined view buttons
     const saveSessionBtn = document.getElementById('saveSessionBtn');
@@ -542,6 +554,10 @@ function setupLeaderboardControls() {
 
     if (viewToggleBtn) {
         viewToggleBtn.addEventListener('click', toggleViewMode);
+    }
+
+    if (mapToggleBtn) {
+        mapToggleBtn.addEventListener('click', toggleTrackMap);
     }
 
     // Combined view button handlers
@@ -953,6 +969,407 @@ function toggleViewMode() {
         localStorage.setItem(STORAGE_KEY_VIEW_MODE, newMode);
     } catch (error) {
         console.error('Error saving view mode:', error);
+    }
+}
+
+/**
+ * Toggle between leaderboard and track map view
+ */
+function toggleTrackMap() {
+    leaderboardState.showTrackMap = !leaderboardState.showTrackMap;
+
+    const combinedView = document.getElementById('combinedLeaderboard');
+    const splitView = document.getElementById('splitLeaderboard');
+    const trackMapView = document.getElementById('trackMapView');
+    const viewToggleBtn = document.getElementById('viewToggleBtn');
+    const mapToggleBtn = document.getElementById('mapToggleBtn');
+    const centerColumnTitle = document.getElementById('centerColumnTitle');
+    const splitViewContainer = document.querySelector('.split-view');
+
+    if (leaderboardState.showTrackMap) {
+        // Show track map, hide leaderboards
+        if (combinedView) combinedView.style.display = 'none';
+        if (splitView) splitView.style.display = 'none';
+        if (trackMapView) trackMapView.style.display = 'flex';
+        if (viewToggleBtn) viewToggleBtn.style.display = 'none';
+        if (mapToggleBtn) {
+            mapToggleBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3h18v18H3z"/>
+                    <path d="M21 9H3M21 15H3M12 3v18"/>
+                </svg>
+                Leaderboard
+            `;
+        }
+        if (centerColumnTitle) centerColumnTitle.textContent = 'Track Map';
+
+        // Expand center column for map view
+        if (splitViewContainer) splitViewContainer.classList.add('map-active');
+
+        // Load the track map (use track from active rig)
+        const activeTrack = rigState.RIG_A?.trackName || rigState.RIG_B?.trackName || 'Silverstone';
+        renderTrackMap(activeTrack);
+
+        console.log('Switched to track map view');
+    } else {
+        // Show leaderboard, hide track map
+        if (trackMapView) trackMapView.style.display = 'none';
+        if (viewToggleBtn) viewToggleBtn.style.display = 'inline-flex';
+        if (mapToggleBtn) {
+            mapToggleBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                    <line x1="9" y1="3" x2="9" y2="18"/>
+                    <line x1="15" y1="6" x2="15" y2="21"/>
+                </svg>
+                Map
+            `;
+        }
+        if (centerColumnTitle) centerColumnTitle.textContent = 'Leaderboard';
+
+        // Restore normal column width
+        if (splitViewContainer) splitViewContainer.classList.remove('map-active');
+
+        // Restore the current view mode
+        applyViewMode(leaderboardState.viewMode);
+
+        console.log('Switched to leaderboard view');
+    }
+}
+
+// ===========================
+// TRACK MAP FUNCTIONALITY
+// ===========================
+
+// Track name mapping from telemetry to file names
+const TRACK_FILE_MAP = {
+    'Bahrain': 'Bahrain',
+    'Sakhir (Bahrain)': 'sakhir',
+    'Sakhir': 'sakhir',
+    'Jeddah': 'jeddah',
+    'Melbourne': 'melbourne',
+    'Suzuka': 'suzuka',
+    'Shanghai': 'shanghai',
+    'Miami': 'miami',
+    'Imola': 'imola',
+    'Monaco': 'monaco',
+    'Montreal': 'montreal',
+    'Catalunya': 'catalunya',
+    'Silverstone': 'silverstone',
+    'Hungaroring': 'hungaroring',
+    'Spa': 'spa',
+    'Zandvoort': 'zandvoort',
+    'Monza': 'monza',
+    'Baku': 'baku',
+    'Azerbaijan': 'baku',
+    'Baku (Azerbaijan)': 'baku',
+    'Singapore': 'singapore',
+    'Texas': 'texas',
+    'Austin': 'texas',
+    'Mexico': 'mexico',
+    'Brazil': 'brazil',
+    'Interlagos': 'brazil',
+    'Las Vegas': 'Las Vegas',
+    'Losail': 'losail',
+    'Qatar': 'losail',
+    'Abu Dhabi': 'abu_dhabi',
+    'Yas Marina': 'abu_dhabi',
+    'Paul Ricard': 'paul_ricard',
+    'Hanoi': 'hanoi',
+    'Sochi': 'sochi'
+};
+
+// Track metadata
+const TRACK_METADATA = {
+    'silverstone': { name: 'Silverstone Circuit', length: '5.891 km', turns: 18, drsZones: 2 },
+    'spa': { name: 'Circuit de Spa-Francorchamps', length: '7.004 km', turns: 19, drsZones: 2 },
+    'monza': { name: 'Autodromo Nazionale di Monza', length: '5.793 km', turns: 11, drsZones: 2 },
+    'monaco': { name: 'Circuit de Monaco', length: '3.337 km', turns: 19, drsZones: 1 },
+    'sakhir': { name: 'Bahrain International Circuit', length: '5.412 km', turns: 15, drsZones: 3 },
+    'Bahrain': { name: 'Bahrain International Circuit', length: '5.412 km', turns: 15, drsZones: 3 },
+    'jeddah': { name: 'Jeddah Corniche Circuit', length: '6.174 km', turns: 27, drsZones: 3 },
+    'melbourne': { name: 'Albert Park Circuit', length: '5.278 km', turns: 14, drsZones: 2 },
+    'suzuka': { name: 'Suzuka International Circuit', length: '5.807 km', turns: 18, drsZones: 2 },
+    'shanghai': { name: 'Shanghai International Circuit', length: '5.451 km', turns: 16, drsZones: 2 },
+    'miami': { name: 'Miami International Autodrome', length: '5.412 km', turns: 19, drsZones: 2 },
+    'imola': { name: 'Autodromo Enzo e Dino Ferrari', length: '4.909 km', turns: 19, drsZones: 2 },
+    'montreal': { name: 'Circuit Gilles-Villeneuve', length: '4.361 km', turns: 14, drsZones: 1 },
+    'catalunya': { name: 'Circuit de Barcelona-Catalunya', length: '4.675 km', turns: 16, drsZones: 2 },
+    'hungaroring': { name: 'Hungaroring', length: '4.381 km', turns: 14, drsZones: 1 },
+    'zandvoort': { name: 'Circuit Zandvoort', length: '4.259 km', turns: 14, drsZones: 2 },
+    'baku': { name: 'Baku City Circuit', length: '6.003 km', turns: 20, drsZones: 2 },
+    'singapore': { name: 'Marina Bay Street Circuit', length: '4.940 km', turns: 19, drsZones: 3 },
+    'texas': { name: 'Circuit of the Americas', length: '5.513 km', turns: 20, drsZones: 2 },
+    'mexico': { name: 'Autódromo Hermanos Rodríguez', length: '4.304 km', turns: 17, drsZones: 3 },
+    'brazil': { name: 'Autódromo José Carlos Pace', length: '4.309 km', turns: 15, drsZones: 2 },
+    'Las Vegas': { name: 'Las Vegas Street Circuit', length: '6.201 km', turns: 17, drsZones: 2 },
+    'losail': { name: 'Losail International Circuit', length: '5.380 km', turns: 16, drsZones: 2 },
+    'abu_dhabi': { name: 'Yas Marina Circuit', length: '5.281 km', turns: 16, drsZones: 2 },
+    'paul_ricard': { name: 'Circuit Paul Ricard', length: '5.842 km', turns: 15, drsZones: 2 },
+    'hanoi': { name: 'Hanoi Street Circuit', length: '5.565 km', turns: 23, drsZones: 2 },
+    'sochi': { name: 'Sochi Autodrom', length: '5.848 km', turns: 18, drsZones: 2 }
+};
+
+let currentTrackData = null;
+let currentTrackName = 'silverstone'; // Default to Silverstone
+
+/**
+ * Load track data from file
+ */
+async function loadTrackData(trackName) {
+    const fileName = TRACK_FILE_MAP[trackName] || trackName.toLowerCase().replace(/\s+/g, '_');
+    const filePath = `/static/tracks/${fileName}_2020_racingline.txt`;
+
+    console.log(`Loading track data for: ${trackName} from ${filePath}`);
+
+    try {
+        const response = await fetch(filePath);
+        if (!response.ok) {
+            throw new Error(`Failed to load track: ${response.status}`);
+        }
+
+        const text = await response.text();
+        const lines = text.trim().split('\n');
+
+        // Skip header lines (first 2 lines)
+        const dataLines = lines.slice(2);
+
+        const points = dataLines.map(line => {
+            const values = line.split(',');
+            return {
+                dist: parseFloat(values[0]),
+                posZ: parseFloat(values[1]),
+                posX: parseFloat(values[2]),
+                posY: parseFloat(values[3]),
+                drs: parseInt(values[4]),
+                sector: parseInt(values[5])
+            };
+        });
+
+        console.log(`Loaded ${points.length} points for ${trackName}`);
+        return points;
+
+    } catch (error) {
+        console.error(`Error loading track ${trackName}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Convert track coordinates to SVG path
+ */
+function createTrackPath(points) {
+    if (!points || points.length === 0) return '';
+
+    // Find bounds for scaling
+    const xCoords = points.map(p => p.posX);
+    const zCoords = points.map(p => p.posZ);
+
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minZ = Math.min(...zCoords);
+    const maxZ = Math.max(...zCoords);
+
+    // SVG dimensions
+    const padding = 50;
+    const width = 800 - (padding * 2);
+    const height = 600 - (padding * 2);
+
+    // Scale factors
+    const rangeX = maxX - minX;
+    const rangeZ = maxZ - minZ;
+    const scale = Math.min(width / rangeX, height / rangeZ);
+
+    // Center offset
+    const offsetX = padding + (width - (rangeX * scale)) / 2;
+    const offsetY = padding + (height - (rangeZ * scale)) / 2;
+
+    // Create path
+    let pathData = '';
+    points.forEach((point, index) => {
+        const x = offsetX + (point.posX - minX) * scale;
+        const y = offsetY + (point.posZ - minZ) * scale;
+
+        if (index === 0) {
+            pathData += `M ${x} ${y}`;
+        } else {
+            pathData += ` L ${x} ${y}`;
+        }
+    });
+
+    // Close the path
+    pathData += ' Z';
+
+    return pathData;
+}
+
+/**
+ * Render track map
+ */
+async function renderTrackMap(trackName) {
+    if (!trackName) trackName = currentTrackName;
+
+    // Update current track
+    currentTrackName = trackName;
+
+    // Load track data
+    const points = await loadTrackData(trackName);
+    if (!points) {
+        console.error('Failed to load track data');
+        return;
+    }
+
+    currentTrackData = points;
+
+    // Get track metadata
+    const fileName = TRACK_FILE_MAP[trackName] || trackName.toLowerCase().replace(/\s+/g, '_');
+    const metadata = TRACK_METADATA[fileName] || {
+        name: trackName,
+        length: 'Unknown',
+        turns: '--',
+        drsZones: '--'
+    };
+
+    // Update track info
+    const trackMapName = document.getElementById('trackMapName');
+    if (trackMapName) trackMapName.textContent = metadata.name;
+
+    // Update metadata
+    const trackInfoItems = document.querySelectorAll('.track-info-value');
+    if (trackInfoItems.length >= 3) {
+        trackInfoItems[0].textContent = metadata.length;
+        trackInfoItems[1].textContent = metadata.turns;
+        trackInfoItems[2].textContent = metadata.drsZones;
+    }
+
+    // Create SVG path
+    const pathData = createTrackPath(points);
+
+    // Update SVG
+    const svg = document.getElementById('trackMapSvg');
+    if (svg) {
+        // Clear existing track
+        const oldTrack = svg.getElementById('trackOutline');
+        if (oldTrack) oldTrack.remove();
+
+        const oldLabels = svg.getElementById('cornerLabels');
+        if (oldLabels) oldLabels.remove();
+
+        const oldStartFinish = svg.getElementById('startFinish');
+        if (oldStartFinish) oldStartFinish.remove();
+
+        // Create new track group
+        const trackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        trackGroup.setAttribute('id', 'trackOutline');
+
+        // Track outer glow/shadow for depth
+        const trackShadow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        trackShadow.setAttribute('d', pathData);
+        trackShadow.setAttribute('fill', 'none');
+        trackShadow.setAttribute('stroke', '#000');
+        trackShadow.setAttribute('stroke-width', '26');
+        trackShadow.setAttribute('stroke-linecap', 'round');
+        trackShadow.setAttribute('stroke-linejoin', 'round');
+        trackShadow.setAttribute('opacity', '0.5');
+
+        // Main track path (asphalt gray)
+        const trackPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        trackPath.setAttribute('d', pathData);
+        trackPath.setAttribute('fill', 'none');
+        trackPath.setAttribute('stroke', '#505050');
+        trackPath.setAttribute('stroke-width', '22');
+        trackPath.setAttribute('stroke-linecap', 'round');
+        trackPath.setAttribute('stroke-linejoin', 'round');
+
+        // Track inner edge (lighter for 3D effect)
+        const trackInner = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        trackInner.setAttribute('d', pathData);
+        trackInner.setAttribute('fill', 'none');
+        trackInner.setAttribute('stroke', '#656565');
+        trackInner.setAttribute('stroke-width', '18');
+        trackInner.setAttribute('stroke-linecap', 'round');
+        trackInner.setAttribute('stroke-linejoin', 'round');
+
+        // Racing line (bright for visibility)
+        const racingLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        racingLine.setAttribute('d', pathData);
+        racingLine.setAttribute('fill', 'none');
+        racingLine.setAttribute('stroke', '#fff'); // F1 red racing line
+        racingLine.setAttribute('stroke-width', '3');
+        racingLine.setAttribute('stroke-dasharray', '15,8');
+        racingLine.setAttribute('opacity', '0.7');
+
+        trackGroup.appendChild(trackShadow);
+        trackGroup.appendChild(trackPath);
+        trackGroup.appendChild(trackInner);
+        trackGroup.appendChild(racingLine);
+
+        // Insert track before markers
+        const markers = svg.getElementById('rigAMarker');
+        svg.insertBefore(trackGroup, markers);
+
+        console.log(`Rendered track: ${metadata.name}`);
+    }
+}
+
+/**
+ * Update car position on track map based on lap distance
+ */
+function updateCarPosition(rigId, lapDistance) {
+    if (!currentTrackData || currentTrackData.length === 0) return;
+    if (!leaderboardState.showTrackMap) return; // Only update if map is showing
+
+    // Find the closest point on the track based on lap distance
+    let closestPoint = currentTrackData[0];
+    let minDiff = Math.abs(currentTrackData[0].dist - lapDistance);
+
+    for (const point of currentTrackData) {
+        const diff = Math.abs(point.dist - lapDistance);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestPoint = point;
+        }
+    }
+
+    // Calculate SVG coordinates using the same scaling as createTrackPath
+    const xCoords = currentTrackData.map(p => p.posX);
+    const zCoords = currentTrackData.map(p => p.posZ);
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minZ = Math.min(...zCoords);
+    const maxZ = Math.max(...zCoords);
+
+    const padding = 50;
+    const width = 800 - (padding * 2);
+    const height = 600 - (padding * 2);
+    const rangeX = maxX - minX;
+    const rangeZ = maxZ - minZ;
+    const scale = Math.min(width / rangeX, height / rangeZ);
+    const offsetX = padding + (width - (rangeX * scale)) / 2;
+    const offsetY = padding + (height - (rangeZ * scale)) / 2;
+
+    const svgX = offsetX + (closestPoint.posX - minX) * scale;
+    const svgY = offsetY + (closestPoint.posZ - minZ) * scale;
+
+    // Update marker position
+    const markerId = rigId === 'RIG_A' ? 'rigAMarker' : 'rigBMarker';
+    const marker = document.getElementById(markerId);
+
+    if (marker) {
+        marker.setAttribute('cx', svgX);
+        marker.setAttribute('cy', svgY);
+        marker.style.display = 'block'; // Show the marker
+    }
+}
+
+/**
+ * Hide car position marker when rig is inactive
+ */
+function hideCarPosition(rigId) {
+    const markerId = rigId === 'RIG_A' ? 'rigAMarker' : 'rigBMarker';
+    const marker = document.getElementById(markerId);
+    if (marker) {
+        marker.style.display = 'none';
     }
 }
 

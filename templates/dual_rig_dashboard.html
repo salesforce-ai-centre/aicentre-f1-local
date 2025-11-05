@@ -284,8 +284,16 @@
             <!-- CENTER: Leaderboard Column -->
             <div class="leaderboard-column">
                 <div class="leaderboard-column-header">
-                    <h2>Leaderboard</h2>
+                    <h2 id="centerColumnTitle">Leaderboard</h2>
                     <div class="leaderboard-column-controls">
+                        <button class="btn-small btn-map-toggle" id="mapToggleBtn" title="Toggle track map">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                                <line x1="9" y1="3" x2="9" y2="18"/>
+                                <line x1="15" y1="6" x2="15" y2="21"/>
+                            </svg>
+                            Map
+                        </button>
                         <button class="btn-small btn-view-toggle" id="viewToggleBtn" title="Toggle view">Combined</button>
                     </div>
                 </div>
@@ -363,6 +371,52 @@
                             </div>
                             <div class="leaderboard-entries-compact" id="rigB-leaderboardEntries">
                                 <div class="no-data-compact">No saved laps</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track Map View -->
+                <div class="track-map-view" id="trackMapView" style="display: none;">
+                    <div class="track-map-container">
+                        <div class="track-map-header">
+                            <h3 id="trackMapName">Silverstone Circuit</h3>
+                            <div class="track-map-legend">
+                                <div class="legend-item">
+                                    <span class="legend-dot rig-a-dot"></span>
+                                    <span>Simulator 1</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot rig-b-dot"></span>
+                                    <span>Simulator 2</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SVG Track Map Container -->
+                        <div class="track-svg-container">
+                            <svg id="trackMapSvg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
+                                <!-- Track will be loaded dynamically via JavaScript -->
+
+                                <!-- Car position markers (will be updated via JS) -->
+                                <circle id="rigAMarker" cx="400" cy="300" r="14" fill="#ef4444" stroke="#fff" stroke-width="3" style="display: none;"/>
+                                <circle id="rigBMarker" cx="400" cy="300" r="14" fill="#3b82f6" stroke="#fff" stroke-width="3" style="display: none;"/>
+                            </svg>
+                        </div>
+
+                        <!-- Track info footer -->
+                        <div class="track-map-info">
+                            <div class="track-info-item">
+                                <span class="track-info-label">Length:</span>
+                                <span class="track-info-value">5.891 km</span>
+                            </div>
+                            <div class="track-info-item">
+                                <span class="track-info-label">Turns:</span>
+                                <span class="track-info-value">18</span>
+                            </div>
+                            <div class="track-info-item">
+                                <span class="track-info-label">DRS Zones:</span>
+                                <span class="track-info-value">2</span>
                             </div>
                         </div>
                     </div>
