@@ -97,6 +97,7 @@ class F1TelemetryReceiverMulti:
         self.current_lap_num = 0
         self.lap_just_completed = False
         self.last_lap_time_ms = 0
+        self.validated_last_lap_time = None  # Persistent validated lap time
         self.current_session_uid = None  # Track session changes
 
         logger.info(f"Initialized receiver for {rig_id} (driver: {driver_name}, port: {port})")
@@ -205,6 +206,7 @@ class F1TelemetryReceiverMulti:
             self.current_lap_num = 0
             self.lap_just_completed = False
             self.last_lap_time_ms = 0
+            self.validated_last_lap_time = None
 
         player_lap = packet.m_lapData[player_index]
 
@@ -253,14 +255,21 @@ class F1TelemetryReceiverMulti:
         self.current_lap_num = lap_num
 
         # Prepare validated lap time data
-        # Only send lap_just_completed and validated last lap time if lap was just completed
+        # Keep sending the validated last lap time until a new lap is completed
         validated_last_lap_time = None
+
+        # If we just completed a lap, validate and store the lap time
         if self.lap_just_completed and self.last_lap_time_ms > 0:
             # Only use lap time if it's reasonable (30s to 10 minutes)
             if 30000 <= self.last_lap_time_ms <= 600000:
-                validated_last_lap_time = self.last_lap_time_ms
+                # Store the validated lap time persistently
+                self.validated_last_lap_time = self.last_lap_time_ms
             else:
                 logger.warning(f"[{self.rig_id}] Rejecting invalid lap time: {self.last_lap_time_ms}ms")
+                self.validated_last_lap_time = None
+
+        # Use the persistent validated lap time (continues to be sent until next lap completion)
+        validated_last_lap_time = getattr(self, 'validated_last_lap_time', None)
 
         self._send_callback({
             'packetId': PACKET_ID_LAP_DATA,
@@ -269,7 +278,7 @@ class F1TelemetryReceiverMulti:
             'frameIdentifier': header.m_frameIdentifier,
             'overallFrameIdentifier': header.m_overallFrameIdentifier,
             'playerCarIndex': player_index,
-            'lastLapTimeInMS': validated_last_lap_time,  # Use validated lap time
+            'lastLapTimeInMS': validated_last_lap_time,  # Persistent validated lap time
             'currentLapTimeInMS': current_lap_time,
             'currentLapNum': lap_num,
             'carPosition': position + 1,  # Convert to 1-indexed

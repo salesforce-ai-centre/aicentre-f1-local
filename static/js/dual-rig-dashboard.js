@@ -1008,7 +1008,15 @@ function toggleTrackMap() {
 
         // Load the track map (use track from active rig)
         const activeTrack = rigState.RIG_A?.trackName || rigState.RIG_B?.trackName || 'Silverstone';
-        renderTrackMap(activeTrack);
+        renderTrackMap(activeTrack).then(() => {
+            // Once track is loaded, initialize car positions if we have lap distance data
+            if (rigState.RIG_A?.lapDistance !== undefined) {
+                updateCarPosition('RIG_A', rigState.RIG_A.lapDistance);
+            }
+            if (rigState.RIG_B?.lapDistance !== undefined) {
+                updateCarPosition('RIG_B', rigState.RIG_B.lapDistance);
+            }
+        });
 
         console.log('Switched to track map view');
     } else {
@@ -1113,6 +1121,7 @@ const TRACK_METADATA = {
 
 let currentTrackData = null;
 let currentTrackName = 'silverstone'; // Default to Silverstone
+let trackScalingCache = null; // Cache scaling calculations for performance
 
 /**
  * Load track data from file
@@ -1222,6 +1231,29 @@ async function renderTrackMap(trackName) {
 
     currentTrackData = points;
 
+    // Calculate and cache scaling factors for car position updates
+    const xCoords = points.map(p => p.posX);
+    const zCoords = points.map(p => p.posZ);
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minZ = Math.min(...zCoords);
+    const maxZ = Math.max(...zCoords);
+
+    const padding = 50;
+    const width = 800 - (padding * 2);
+    const height = 600 - (padding * 2);
+    const rangeX = maxX - minX;
+    const rangeZ = maxZ - minZ;
+    const scale = Math.min(width / rangeX, height / rangeZ);
+    const offsetX = padding + (width - (rangeX * scale)) / 2;
+    const offsetY = padding + (height - (rangeZ * scale)) / 2;
+
+    // Cache for car position updates
+    trackScalingCache = {
+        minX, maxX, minZ, maxZ,
+        scale, offsetX, offsetY
+    };
+
     // Get track metadata
     const fileName = TRACK_FILE_MAP[trackName] || trackName.toLowerCase().replace(/\s+/g, '_');
     const metadata = TRACK_METADATA[fileName] || {
@@ -1317,37 +1349,35 @@ async function renderTrackMap(trackName) {
  * Update car position on track map based on lap distance
  */
 function updateCarPosition(rigId, lapDistance) {
-    if (!currentTrackData || currentTrackData.length === 0) return;
+    // Validation checks
+    if (!currentTrackData || currentTrackData.length === 0) {
+        console.warn(`[${rigId}] No track data available for position update`);
+        return;
+    }
+    if (!trackScalingCache) {
+        console.warn(`[${rigId}] No scaling cache available, track may not be loaded yet`);
+        return;
+    }
     if (!leaderboardState.showTrackMap) return; // Only update if map is showing
+
+    // Handle negative lap distances (before start/finish line crossed)
+    // Clamp to 0 to prevent issues
+    const validLapDistance = Math.max(0, lapDistance);
 
     // Find the closest point on the track based on lap distance
     let closestPoint = currentTrackData[0];
-    let minDiff = Math.abs(currentTrackData[0].dist - lapDistance);
+    let minDiff = Math.abs(currentTrackData[0].dist - validLapDistance);
 
     for (const point of currentTrackData) {
-        const diff = Math.abs(point.dist - lapDistance);
+        const diff = Math.abs(point.dist - validLapDistance);
         if (diff < minDiff) {
             minDiff = diff;
             closestPoint = point;
         }
     }
 
-    // Calculate SVG coordinates using the same scaling as createTrackPath
-    const xCoords = currentTrackData.map(p => p.posX);
-    const zCoords = currentTrackData.map(p => p.posZ);
-    const minX = Math.min(...xCoords);
-    const maxX = Math.max(...xCoords);
-    const minZ = Math.min(...zCoords);
-    const maxZ = Math.max(...zCoords);
-
-    const padding = 50;
-    const width = 800 - (padding * 2);
-    const height = 600 - (padding * 2);
-    const rangeX = maxX - minX;
-    const rangeZ = maxZ - minZ;
-    const scale = Math.min(width / rangeX, height / rangeZ);
-    const offsetX = padding + (width - (rangeX * scale)) / 2;
-    const offsetY = padding + (height - (rangeZ * scale)) / 2;
+    // Use cached scaling factors for performance
+    const { minX, minZ, scale, offsetX, offsetY } = trackScalingCache;
 
     const svgX = offsetX + (closestPoint.posX - minX) * scale;
     const svgY = offsetY + (closestPoint.posZ - minZ) * scale;
@@ -1360,6 +1390,8 @@ function updateCarPosition(rigId, lapDistance) {
         marker.setAttribute('cx', svgX);
         marker.setAttribute('cy', svgY);
         marker.style.display = 'block'; // Show the marker
+    } else {
+        console.warn(`[${rigId}] Marker element not found: ${markerId}`);
     }
 }
 
