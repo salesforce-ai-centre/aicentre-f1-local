@@ -210,11 +210,11 @@ class F1TelemetryReceiverMulti:
 
         player_lap = packet.m_lapData[player_index]
 
-        # Validate and sanitize position (should be 0-21 for 22 cars, or 0-19 for 20 cars)
+        # Validate and sanitize position (should be 1-22 for F1 25, already 1-indexed per UDP spec)
         # If out of range, it's likely corrupt data
         position = player_lap.m_carPosition
-        if position > 100:  # Clearly corrupt
-            logger.warning(f"[{self.rig_id}] Corrupt position data: {position} (format: {header.m_packetFormat})")
+        if position < 1 or position > 22:  # Valid range is 1-22
+            logger.warning(f"[{self.rig_id}] Invalid position data: {position} (expected 1-22, format: {header.m_packetFormat})")
             logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={player_lap.m_currentLapNum}, "
                         f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
             return
@@ -278,10 +278,11 @@ class F1TelemetryReceiverMulti:
             'frameIdentifier': header.m_frameIdentifier,
             'overallFrameIdentifier': header.m_overallFrameIdentifier,
             'playerCarIndex': player_index,
-            'lastLapTimeInMS': validated_last_lap_time,  # Persistent validated lap time
+            'lastLapTimeInMS': validated_last_lap_time or 0,  # Persistent validated lap time (0 if None)
             'currentLapTimeInMS': current_lap_time,
             'currentLapNum': lap_num,
-            'carPosition': position + 1,  # Convert to 1-indexed
+            'position': position,  # Already 1-indexed per F1 25 UDP spec (1-22)
+            'carPosition': position,  # Keep for backward compatibility
             'sector': player_lap.m_sector,
             'currentLapInvalid': player_lap.m_currentLapInvalid,
             'pitStatus': player_lap.m_pitStatus,
