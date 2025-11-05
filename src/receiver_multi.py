@@ -99,6 +99,7 @@ class F1TelemetryReceiverMulti:
         self.last_lap_time_ms = 0
         self.validated_last_lap_time = None  # Persistent validated lap time
         self.current_session_uid = None  # Track session changes
+        self.last_heartbeat_time = time.time()  # For periodic status logging
 
         logger.info(f"Initialized receiver for {rig_id} (driver: {driver_name}, port: {port})")
 
@@ -119,6 +120,11 @@ class F1TelemetryReceiverMulti:
             while self.running:
                 try:
                     data, addr = self.socket.recvfrom(2048)
+
+                    # Log first packet received to confirm UDP is working
+                    if self.packet_count == 0:
+                        logger.info(f"[{self.rig_id}] 🎮 First UDP packet received from {addr}!")
+
                     self._process_packet(data)
                 except socket.timeout:
                     continue
