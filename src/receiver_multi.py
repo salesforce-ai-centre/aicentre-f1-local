@@ -93,6 +93,12 @@ class F1TelemetryReceiverMulti:
         self.latest_session = None
         self.latest_header = None
 
+        # Lap completion tracking (similar to receiver.py)
+        self.current_lap_num = 0
+        self.lap_just_completed = False
+        self.last_lap_time_ms = 0
+        self.current_session_uid = None  # Track session changes
+
         logger.info(f"Initialized receiver for {rig_id} (driver: {driver_name}, port: {port})")
 
     def run(self):
@@ -189,6 +195,17 @@ class F1TelemetryReceiverMulti:
             logger.warning(f"[{self.rig_id}] Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
             return
 
+        # Detect session changes and reset lap tracking
+        if self.current_session_uid is None:
+            self.current_session_uid = header.m_sessionUID
+            logger.info(f"[{self.rig_id}] Session started: {header.m_sessionUID}")
+        elif self.current_session_uid != header.m_sessionUID:
+            logger.info(f"[{self.rig_id}] Session changed from {self.current_session_uid} to {header.m_sessionUID} - resetting lap tracking")
+            self.current_session_uid = header.m_sessionUID
+            self.current_lap_num = 0
+            self.lap_just_completed = False
+            self.last_lap_time_ms = 0
+
         player_lap = packet.m_lapData[player_index]
 
         # Validate and sanitize position (should be 0-21 for 22 cars, or 0-19 for 20 cars)
@@ -218,6 +235,33 @@ class F1TelemetryReceiverMulti:
             logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={lap_num}, pos={position}")
             return
 
+        # Detect lap completion (check if lap number increased)
+        # This is CRITICAL for accurate lap time tracking
+        if lap_num > self.current_lap_num and self.current_lap_num > 0:
+            # Lap just completed!
+            logger.info(f"[{self.rig_id}] Lap {self.current_lap_num} completed. New lap: {lap_num}")
+            self.lap_just_completed = True
+            # Use lastLapTimeInMS from the NEW packet for the completed lap
+            self.last_lap_time_ms = last_lap_time
+
+            # Validate the completed lap time (should be between 30s and 10 minutes)
+            if self.last_lap_time_ms > 600000 or self.last_lap_time_ms < 30000:
+                logger.warning(f"[{self.rig_id}] Unusual completed lap time: {self.last_lap_time_ms}ms "
+                              f"({self.last_lap_time_ms/1000.0:.3f}s) for lap {self.current_lap_num}")
+
+        # Update current lap number AFTER checking for completion
+        self.current_lap_num = lap_num
+
+        # Prepare validated lap time data
+        # Only send lap_just_completed and validated last lap time if lap was just completed
+        validated_last_lap_time = None
+        if self.lap_just_completed and self.last_lap_time_ms > 0:
+            # Only use lap time if it's reasonable (30s to 10 minutes)
+            if 30000 <= self.last_lap_time_ms <= 600000:
+                validated_last_lap_time = self.last_lap_time_ms
+            else:
+                logger.warning(f"[{self.rig_id}] Rejecting invalid lap time: {self.last_lap_time_ms}ms")
+
         self._send_callback({
             'packetId': PACKET_ID_LAP_DATA,
             'sessionUID': header.m_sessionUID,
@@ -225,7 +269,7 @@ class F1TelemetryReceiverMulti:
             'frameIdentifier': header.m_frameIdentifier,
             'overallFrameIdentifier': header.m_overallFrameIdentifier,
             'playerCarIndex': player_index,
-            'lastLapTimeInMS': last_lap_time,
+            'lastLapTimeInMS': validated_last_lap_time,  # Use validated lap time
             'currentLapTimeInMS': current_lap_time,
             'currentLapNum': lap_num,
             'carPosition': position + 1,  # Convert to 1-indexed
@@ -233,7 +277,12 @@ class F1TelemetryReceiverMulti:
             'currentLapInvalid': player_lap.m_currentLapInvalid,
             'pitStatus': player_lap.m_pitStatus,
             'lapDistance': player_lap.m_lapDistance,
+            'lapCompleted': self.lap_just_completed,  # Add lap completion flag
         })
+
+        # Reset lap completion flag after sending
+        if self.lap_just_completed:
+            self.lap_just_completed = False
 
     def _handle_car_telemetry(self, header: PacketHeader, payload: bytes):
         """Process car telemetry packet"""
