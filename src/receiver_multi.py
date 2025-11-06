@@ -127,6 +127,14 @@ class F1TelemetryReceiverMulti:
 
                     self._process_packet(data)
                 except socket.timeout:
+                    # Periodic heartbeat every 10 seconds when no packets received
+                    now = time.time()
+                    if now - self.last_heartbeat_time > 10:
+                        if self.packet_count == 0:
+                            logger.warning(f"[{self.rig_id}] ⏳ Waiting for UDP packets on port {self.port}... (No packets received yet)")
+                        else:
+                            logger.info(f"[{self.rig_id}] 💓 Heartbeat - Received {self.packet_count} packets total")
+                        self.last_heartbeat_time = now
                     continue
                 except Exception as e:
                     if self.running:  # Only log if not shutting down
@@ -198,8 +206,24 @@ class F1TelemetryReceiverMulti:
         self.latest_lap_data = packet
         player_index = header.m_playerCarIndex
 
+        # Log player index on first lap data packet and periodically
+        if self.packet_count == 1 or self.packet_count % 300 == 0:
+            logger.info(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index} from header (Total cars in array: {len(packet.m_lapData)})")
+
+            # In multiplayer, log data for first few cars to see if we're using wrong index
+            if len(packet.m_lapData) > 1:
+                logger.info(f"[{self.rig_id}] 👥 MULTIPLAYER DETECTED - Showing first 4 cars:")
+                for i in range(min(4, len(packet.m_lapData))):
+                    car = packet.m_lapData[i]
+                    logger.info(f"[{self.rig_id}]   Car[{i}]: Pos={car.m_carPosition}, Lap={car.m_currentLapNum}, "
+                               f"LapTime={car.m_currentLapTimeInMS}ms, LapDist={car.m_lapDistance:.1f}m")
+
         if player_index >= len(packet.m_lapData):
-            logger.warning(f"[{self.rig_id}] Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
+            logger.warning(f"[{self.rig_id}] ❌ Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
+            return
+
+        if player_index == 255:
+            logger.warning(f"[{self.rig_id}] ⚠️ Player index is 255 (spectator mode) - cannot read lap data")
             return
 
         # Detect session changes and reset lap tracking
@@ -218,7 +242,8 @@ class F1TelemetryReceiverMulti:
 
         # Debug: Log raw UDP values every 60 packets (~1 per second at 60Hz)
         if self.packet_count % 60 == 0:
-            logger.info(f"[{self.rig_id}] 📥 RAW UDP DATA - Position: {player_lap.m_carPosition}, "
+            logger.info(f"[{self.rig_id}] 📥 RAW UDP DATA [player_index={player_index}] - "
+                       f"Position: {player_lap.m_carPosition}, "
                        f"Lap: {player_lap.m_currentLapNum}, "
                        f"CurrentLapTimeMS: {player_lap.m_currentLapTimeInMS}, "
                        f"LastLapTimeMS: {player_lap.m_lastLapTimeInMS}, "
@@ -230,6 +255,7 @@ class F1TelemetryReceiverMulti:
         # Position can be 0 in qualifying, practice, or when in garage - don't reject packet
         position = player_lap.m_carPosition
         if position < 0 or position > 22:  # Valid range is 0-22 (0 = not set/invalid)
+            logger.warning(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index} from header (Total cars in array: {len(packet.m_lapData)})")
             logger.warning(f"[{self.rig_id}] ❌ Out of range position: {position} (expected 0-22, format: {header.m_packetFormat})")
             position = 0  # Set to 0 as fallback
         elif position == 0:

@@ -85,6 +85,12 @@ def index():
     return render_template('dual_rig_dashboard.html', rigs=rigs)
 
 
+@app.route('/playback')
+def playback():
+    """Serve packet playback analyzer page"""
+    return render_template('packet_playback.html')
+
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
