@@ -6,7 +6,31 @@ This directory contains tools and recorded UDP packet data for debugging and tes
 
 ### Recording Packets
 
-Record UDP packets from your F1 game for later analysis:
+#### Recording from Multiple Rigs Simultaneously (Recommended for Spectator PC)
+
+If you're running on the receiver PC with spectator view, record from all rigs at once:
+
+```bash
+# Record from both RIG A (20777) and RIG B (20778) simultaneously
+python3 scripts/record_all_rigs.py recordings/lan_session
+
+# Record from custom ports
+python3 scripts/record_all_rigs.py recordings/custom_session 20777 20778 20779
+
+# Creates separate files for each port:
+#   recordings/lan_session/rig_port20777_20231110_143022.packets
+#   recordings/lan_session/rig_port20778_20231110_143022.packets
+```
+
+**Features:**
+- Records all ports simultaneously in separate files
+- Real-time statistics showing packets/sec for each port
+- Automatic timestamped filenames
+- Press Ctrl+C to stop all recordings at once
+
+#### Recording Individual Rigs
+
+Record UDP packets from a single port:
 
 ```bash
 # Record from RIG_A (port 20777) for 60 seconds
@@ -176,6 +200,40 @@ python3 scripts/analyze_udp_packets.py --input recordings/lan_rig_b.packets --de
 
 # Compare player_index values - they should be different!
 ```
+
+## Web-Based Packet Playback
+
+You can now analyze and play back recordings directly in the dual-rig dashboard:
+
+### Access the Playback Page
+
+```bash
+# Start the dashboard
+python3 scripts/run_dual_dashboard.py
+
+# Open your browser to:
+http://localhost:8080/playback
+```
+
+### Features
+
+- **Drag & Drop**: Upload `.packets` files directly in the browser
+- **Playback Controls**: Play, pause, stop with speed control (0.25x to 5x)
+- **Target Port Selection**: Choose which rig to send to (20777 for RIG_A, 20778 for RIG_B)
+- **Loop Mode**: Continuously replay for extended testing
+- **Metadata Display**: View recording info (duration, packet count, date, port)
+- **Progress Tracking**: Real-time progress bar and packet counter
+
+### Typical Workflow
+
+1. Record packets from both rigs during a LAN session
+2. Open the playback page at `http://localhost:8080/playback`
+3. Upload RIG_A recording and play it back to port 20777
+4. Open a second browser tab for RIG_B recording to port 20778
+5. Watch the main dashboard to verify both rigs display correctly
+6. Adjust playback speed or loop to test different scenarios
+
+**Note**: The web playback UI is currently frontend-only. For full playback functionality with actual UDP transmission, use the command-line `playback_udp_packets.py` script.
 
 ## Next Steps
 

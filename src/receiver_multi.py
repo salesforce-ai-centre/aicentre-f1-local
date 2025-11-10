@@ -101,6 +101,10 @@ class F1TelemetryReceiverMulti:
         self.current_session_uid = None  # Track session changes
         self.last_heartbeat_time = time.time()  # For periodic status logging
 
+        # Auto-detect correct player index in multiplayer
+        self.override_player_index = None  # If set, use this instead of header
+        self.player_index_locked = False  # Once we find the right index, lock it
+
         logger.info(f"Initialized receiver for {rig_id} (driver: {driver_name}, port: {port})")
 
     def run(self):
@@ -204,19 +208,40 @@ class F1TelemetryReceiverMulti:
             return
 
         self.latest_lap_data = packet
-        player_index = header.m_playerCarIndex
+        header_player_index = header.m_playerCarIndex
 
-        # Log player index on first lap data packet and periodically
+        # AUTO-DETECT CORRECT PLAYER INDEX (Fix for LAN multiplayer bug)
+        # In LAN games, the header m_playerCarIndex is often wrong!
+        # Check if we have an override, or if the header index has no data
+        player_index = self.override_player_index if self.override_player_index is not None else header_player_index
+
+        # Auto-detect if not locked and header index seems invalid
+        if not self.player_index_locked and len(packet.m_lapData) > 1:
+            # Check if current player_index has active data
+            if player_index < len(packet.m_lapData):
+                current_car = packet.m_lapData[player_index]
+                has_data = (current_car.m_currentLapNum > 0 or
+                           current_car.m_carPosition > 0 or
+                           abs(current_car.m_lapDistance) > 0.1)
+
+                if not has_data:
+                    # Current index has no data - find an active car!
+                    logger.warning(f"[{self.rig_id}] ⚠️  Header player_index={header_player_index} has NO DATA! Searching for active car...")
+
+                    for i in range(len(packet.m_lapData)):
+                        car = packet.m_lapData[i]
+                        if (car.m_currentLapNum > 0 or car.m_carPosition > 0 or abs(car.m_lapDistance) > 0.1):
+                            # Found an active car!
+                            self.override_player_index = i
+                            self.player_index_locked = True
+                            player_index = i
+                            logger.info(f"[{self.rig_id}] ✅ AUTO-DETECTED player at index {i} (header said {header_player_index})")
+                            break
+
+        # Log player index periodically
         if self.packet_count == 1 or self.packet_count % 300 == 0:
-            logger.info(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index} from header (Total cars in array: {len(packet.m_lapData)})")
-
-            # In multiplayer, log data for first few cars to see if we're using wrong index
-            if len(packet.m_lapData) > 1:
-                logger.info(f"[{self.rig_id}] 👥 MULTIPLAYER DETECTED - Showing first 4 cars:")
-                for i in range(min(4, len(packet.m_lapData))):
-                    car = packet.m_lapData[i]
-                    logger.info(f"[{self.rig_id}]   Car[{i}]: Pos={car.m_carPosition}, Lap={car.m_currentLapNum}, "
-                               f"LapTime={car.m_currentLapTimeInMS}ms, LapDist={car.m_lapDistance:.1f}m")
+            override_msg = f" (OVERRIDE from header {header_player_index})" if self.override_player_index is not None else ""
+            logger.info(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index}{override_msg} (Total cars: {len(packet.m_lapData)})")
 
         if player_index >= len(packet.m_lapData):
             logger.warning(f"[{self.rig_id}] ❌ Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
