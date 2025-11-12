@@ -25,6 +25,12 @@ def playback_udp_packets(input_file, target_host, target_port, speed=1.0, loop=F
     # Create UDP socket for sending
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+    # Increase send buffer size to handle larger F1 packets (up to 64KB)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+    except OSError as e:
+        print(f"⚠️  Warning: Could not set socket buffer size: {e}")
+
     print(f"📼 Playing back UDP packets")
     print(f"📁 Input file: {input_file}")
     print(f"🎯 Target: {target_host}:{target_port}")

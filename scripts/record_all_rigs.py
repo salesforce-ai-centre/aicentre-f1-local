@@ -76,6 +76,9 @@ class MultiRigRecorder:
         file_handle.write(struct.pack('<I', len(metadata_json)))
         file_handle.write(metadata_json)
 
+        # Write separator
+        file_handle.write(b"---PACKETS---\n")
+
         print(f"📝 Recording port {port} to: {filename}")
         return file_handle, filename
 
@@ -92,7 +95,7 @@ class MultiRigRecorder:
         try:
             while self.running:
                 try:
-                    data, addr = sock.recvfrom(2048)
+                    data, addr = sock.recvfrom(4096)  # Increased buffer for larger F1 packets
                     timestamp = time.time()
 
                     # Write: timestamp (double) + size (uint32) + data (bytes)

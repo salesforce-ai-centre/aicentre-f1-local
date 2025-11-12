@@ -220,22 +220,30 @@ class F1TelemetryReceiverMulti:
             # Check if current player_index has active data
             if player_index < len(packet.m_lapData):
                 current_car = packet.m_lapData[player_index]
-                has_data = (current_car.m_currentLapNum > 0 or
-                           current_car.m_carPosition > 0 or
-                           abs(current_car.m_lapDistance) > 0.1)
+                # Check for VALID data (lap num must be reasonable, not corrupted)
+                has_valid_data = (
+                    ((current_car.m_currentLapNum > 0 and current_car.m_currentLapNum < 50) or
+                     (current_car.m_carPosition > 0 and current_car.m_carPosition <= 22)) and
+                    abs(current_car.m_lapDistance) < 1e10  # Not corrupted (not huge negative/positive)
+                )
 
-                if not has_data:
-                    # Current index has no data - find an active car!
-                    logger.warning(f"[{self.rig_id}] ⚠️  Header player_index={header_player_index} has NO DATA! Searching for active car...")
+                if not has_valid_data:
+                    # Current index has no valid data - find an active car!
+                    logger.warning(f"[{self.rig_id}] ⚠️  Header player_index={header_player_index} has NO VALID DATA! Searching for active car...")
+                    logger.debug(f"[{self.rig_id}]     Bad data: lapNum={current_car.m_currentLapNum}, pos={current_car.m_carPosition}, dist={current_car.m_lapDistance}")
 
                     for i in range(len(packet.m_lapData)):
                         car = packet.m_lapData[i]
-                        if (car.m_currentLapNum > 0 or car.m_carPosition > 0 or abs(car.m_lapDistance) > 0.1):
-                            # Found an active car!
+                        # Look for VALID data (reasonable lap number, valid position, not corrupted distance)
+                        if (((car.m_currentLapNum > 0 and car.m_currentLapNum < 50) or
+                             (car.m_carPosition > 0 and car.m_carPosition <= 22)) and
+                            abs(car.m_lapDistance) < 1e10):
+                            # Found an active car with valid data!
                             self.override_player_index = i
                             self.player_index_locked = True
                             player_index = i
                             logger.info(f"[{self.rig_id}] ✅ AUTO-DETECTED player at index {i} (header said {header_player_index})")
+                            logger.info(f"[{self.rig_id}]     Valid data: lapNum={car.m_currentLapNum}, pos={car.m_carPosition}, dist={car.m_lapDistance:.2f}m")
                             break
 
         # Log player index periodically
@@ -267,6 +275,7 @@ class F1TelemetryReceiverMulti:
 
         # Debug: Log raw UDP values every 60 packets (~1 per second at 60Hz)
         if self.packet_count % 60 == 0:
+            logger.warning(f"[{self.rig_id}]: {packet}")
             logger.info(f"[{self.rig_id}] 📥 RAW UDP DATA [player_index={player_index}] - "
                        f"Position: {player_lap.m_carPosition}, "
                        f"Lap: {player_lap.m_currentLapNum}, "
