@@ -93,6 +93,18 @@ class F1TelemetryReceiverMulti:
         self.latest_session = None
         self.latest_header = None
 
+        # Lap completion tracking (similar to receiver.py)
+        self.current_lap_num = 0
+        self.lap_just_completed = False
+        self.last_lap_time_ms = 0
+        self.validated_last_lap_time = None  # Persistent validated lap time
+        self.current_session_uid = None  # Track session changes
+        self.last_heartbeat_time = time.time()  # For periodic status logging
+
+        # Auto-detect correct player index in multiplayer
+        self.override_player_index = None  # If set, use this instead of header
+        self.player_index_locked = False  # Once we find the right index, lock it
+
         logger.info(f"Initialized receiver for {rig_id} (driver: {driver_name}, port: {port})")
 
     def run(self):
@@ -112,8 +124,21 @@ class F1TelemetryReceiverMulti:
             while self.running:
                 try:
                     data, addr = self.socket.recvfrom(2048)
+
+                    # Log first packet received to confirm UDP is working
+                    if self.packet_count == 0:
+                        logger.info(f"[{self.rig_id}] 🎮 First UDP packet received from {addr}!")
+
                     self._process_packet(data)
                 except socket.timeout:
+                    # Periodic heartbeat every 10 seconds when no packets received
+                    now = time.time()
+                    if now - self.last_heartbeat_time > 10:
+                        if self.packet_count == 0:
+                            logger.warning(f"[{self.rig_id}] ⏳ Waiting for UDP packets on port {self.port}... (No packets received yet)")
+                        else:
+                            logger.info(f"[{self.rig_id}] 💓 Heartbeat - Received {self.packet_count} packets total")
+                        self.last_heartbeat_time = now
                     continue
                 except Exception as e:
                     if self.running:  # Only log if not shutting down
@@ -183,22 +208,94 @@ class F1TelemetryReceiverMulti:
             return
 
         self.latest_lap_data = packet
-        player_index = header.m_playerCarIndex
+        header_player_index = header.m_playerCarIndex
+
+        # AUTO-DETECT CORRECT PLAYER INDEX (Fix for LAN multiplayer bug)
+        # In LAN games, the header m_playerCarIndex is often wrong!
+        # Check if we have an override, or if the header index has no data
+        player_index = self.override_player_index if self.override_player_index is not None else header_player_index
+
+        # Auto-detect if not locked and header index seems invalid
+        if not self.player_index_locked and len(packet.m_lapData) > 1:
+            # Check if current player_index has active data
+            if player_index < len(packet.m_lapData):
+                current_car = packet.m_lapData[player_index]
+                # Check for VALID data (lap num must be reasonable, not corrupted)
+                has_valid_data = (
+                    ((current_car.m_currentLapNum > 0 and current_car.m_currentLapNum < 50) or
+                     (current_car.m_carPosition > 0 and current_car.m_carPosition <= 22)) and
+                    abs(current_car.m_lapDistance) < 1e10  # Not corrupted (not huge negative/positive)
+                )
+
+                if not has_valid_data:
+                    # Current index has no valid data - find an active car!
+                    logger.warning(f"[{self.rig_id}] ⚠️  Header player_index={header_player_index} has NO VALID DATA! Searching for active car...")
+                    logger.debug(f"[{self.rig_id}]     Bad data: lapNum={current_car.m_currentLapNum}, pos={current_car.m_carPosition}, dist={current_car.m_lapDistance}")
+
+                    for i in range(len(packet.m_lapData)):
+                        car = packet.m_lapData[i]
+                        # Look for VALID data (reasonable lap number, valid position, not corrupted distance)
+                        if (((car.m_currentLapNum > 0 and car.m_currentLapNum < 50) or
+                             (car.m_carPosition > 0 and car.m_carPosition <= 22)) and
+                            abs(car.m_lapDistance) < 1e10):
+                            # Found an active car with valid data!
+                            self.override_player_index = i
+                            self.player_index_locked = True
+                            player_index = i
+                            logger.info(f"[{self.rig_id}] ✅ AUTO-DETECTED player at index {i} (header said {header_player_index})")
+                            logger.info(f"[{self.rig_id}]     Valid data: lapNum={car.m_currentLapNum}, pos={car.m_carPosition}, dist={car.m_lapDistance:.2f}m")
+                            break
+
+        # Log player index periodically
+        if self.packet_count == 1 or self.packet_count % 300 == 0:
+            override_msg = f" (OVERRIDE from header {header_player_index})" if self.override_player_index is not None else ""
+            logger.info(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index}{override_msg} (Total cars: {len(packet.m_lapData)})")
 
         if player_index >= len(packet.m_lapData):
-            logger.warning(f"[{self.rig_id}] Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
+            logger.warning(f"[{self.rig_id}] ❌ Player index {player_index} out of range (have {len(packet.m_lapData)} cars)")
             return
+
+        if player_index == 255:
+            logger.warning(f"[{self.rig_id}] ⚠️ Player index is 255 (spectator mode) - cannot read lap data")
+            return
+
+        # Detect session changes and reset lap tracking
+        if self.current_session_uid is None:
+            self.current_session_uid = header.m_sessionUID
+            logger.info(f"[{self.rig_id}] Session started: {header.m_sessionUID}")
+        elif self.current_session_uid != header.m_sessionUID:
+            logger.info(f"[{self.rig_id}] Session changed from {self.current_session_uid} to {header.m_sessionUID} - resetting lap tracking")
+            self.current_session_uid = header.m_sessionUID
+            self.current_lap_num = 0
+            self.lap_just_completed = False
+            self.last_lap_time_ms = 0
+            self.validated_last_lap_time = None
 
         player_lap = packet.m_lapData[player_index]
 
-        # Validate and sanitize position (should be 0-21 for 22 cars, or 0-19 for 20 cars)
-        # If out of range, it's likely corrupt data
+        # Debug: Log raw UDP values every 60 packets (~1 per second at 60Hz)
+        if self.packet_count % 60 == 0:
+            logger.warning(f"[{self.rig_id}]: {packet}")
+            logger.info(f"[{self.rig_id}] 📥 RAW UDP DATA [player_index={player_index}] - "
+                       f"Position: {player_lap.m_carPosition}, "
+                       f"Lap: {player_lap.m_currentLapNum}, "
+                       f"CurrentLapTimeMS: {player_lap.m_currentLapTimeInMS}, "
+                       f"LastLapTimeMS: {player_lap.m_lastLapTimeInMS}, "
+                       f"LapDistance: {player_lap.m_lapDistance:.1f}m, "
+                       f"Sector: {player_lap.m_sector}, "
+                       f"Invalid: {player_lap.m_currentLapInvalid}")
+
+        # Validate and sanitize position (should be 1-22 for F1 25, already 1-indexed per UDP spec)
+        # Position can be 0 in qualifying, practice, or when in garage - don't reject packet
         position = player_lap.m_carPosition
-        if position > 100:  # Clearly corrupt
-            logger.warning(f"[{self.rig_id}] Corrupt position data: {position} (format: {header.m_packetFormat})")
-            logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={player_lap.m_currentLapNum}, "
-                        f"lastLapMS={player_lap.m_lastLapTimeInMS}, currentLapMS={player_lap.m_currentLapTimeInMS}")
-            return
+        if position < 0 or position > 22:  # Valid range is 0-22 (0 = not set/invalid)
+            logger.warning(f"[{self.rig_id}] 🎯 Lap Data - Using player_index={player_index} from header (Total cars in array: {len(packet.m_lapData)})")
+            logger.warning(f"[{self.rig_id}] ❌ Out of range position: {position} (expected 0-22, format: {header.m_packetFormat})")
+            position = 0  # Set to 0 as fallback
+        elif position == 0:
+            # Position 0 is valid for practice/qualifying/garage - just log occasionally
+            if self.packet_count % 300 == 0:  # Log every 5 seconds
+                logger.debug(f"[{self.rig_id}] Position is 0 (practice/qualifying/garage mode)")
 
         # Validate lap number (should be reasonable, e.g., 1-200)
         lap_num = player_lap.m_currentLapNum
@@ -218,22 +315,73 @@ class F1TelemetryReceiverMulti:
             logger.debug(f"[{self.rig_id}] Debug - Raw lap data fields: lap={lap_num}, pos={position}")
             return
 
-        self._send_callback({
+        # Detect lap completion (check if lap number increased)
+        # This is CRITICAL for accurate lap time tracking
+        if lap_num > self.current_lap_num and self.current_lap_num > 0:
+            # Lap just completed!
+            logger.info(f"[{self.rig_id}] Lap {self.current_lap_num} completed. New lap: {lap_num}")
+            self.lap_just_completed = True
+            # Use lastLapTimeInMS from the NEW packet for the completed lap
+            self.last_lap_time_ms = last_lap_time
+
+            # Validate the completed lap time (should be between 30s and 10 minutes)
+            if self.last_lap_time_ms > 600000 or self.last_lap_time_ms < 30000:
+                logger.warning(f"[{self.rig_id}] Unusual completed lap time: {self.last_lap_time_ms}ms "
+                              f"({self.last_lap_time_ms/1000.0:.3f}s) for lap {self.current_lap_num}")
+
+        # Update current lap number AFTER checking for completion
+        self.current_lap_num = lap_num
+
+        # Prepare validated lap time data
+        # Keep sending the validated last lap time until a new lap is completed
+        validated_last_lap_time = None
+
+        # If we just completed a lap, validate and store the lap time
+        if self.lap_just_completed and self.last_lap_time_ms > 0:
+            # Only use lap time if it's reasonable (30s to 10 minutes)
+            if 30000 <= self.last_lap_time_ms <= 600000:
+                # Store the validated lap time persistently
+                self.validated_last_lap_time = self.last_lap_time_ms
+            else:
+                logger.warning(f"[{self.rig_id}] Rejecting invalid lap time: {self.last_lap_time_ms}ms")
+                self.validated_last_lap_time = None
+
+        # Use the persistent validated lap time (continues to be sent until next lap completion)
+        validated_last_lap_time = getattr(self, 'validated_last_lap_time', None)
+
+        # Prepare data to send
+        data_to_send = {
             'packetId': PACKET_ID_LAP_DATA,
             'sessionUID': header.m_sessionUID,
             'sessionTime': header.m_sessionTime,
             'frameIdentifier': header.m_frameIdentifier,
             'overallFrameIdentifier': header.m_overallFrameIdentifier,
             'playerCarIndex': player_index,
-            'lastLapTimeInMS': last_lap_time,
+            'lastLapTimeInMS': validated_last_lap_time or 0,  # Persistent validated lap time (0 if None)
             'currentLapTimeInMS': current_lap_time,
             'currentLapNum': lap_num,
-            'carPosition': position + 1,  # Convert to 1-indexed
+            'position': position,  # Already 1-indexed per F1 25 UDP spec (1-22)
+            'carPosition': position,  # Keep for backward compatibility
             'sector': player_lap.m_sector,
             'currentLapInvalid': player_lap.m_currentLapInvalid,
             'pitStatus': player_lap.m_pitStatus,
             'lapDistance': player_lap.m_lapDistance,
-        })
+            'lapCompleted': self.lap_just_completed,  # Add lap completion flag
+        }
+
+        # Debug: Log data being sent every 60 packets (~1 per second at 60Hz)
+        if self.packet_count % 60 == 0:
+            logger.info(f"[{self.rig_id}] 📤 SENDING TO FRONTEND - Position: {data_to_send['position']}, "
+                       f"Lap: {data_to_send['currentLapNum']}, "
+                       f"CurrentLapTimeMS: {data_to_send['currentLapTimeInMS']}, "
+                       f"LastLapTimeMS: {data_to_send['lastLapTimeInMS']}, "
+                       f"LapDistance: {data_to_send['lapDistance']:.1f}m")
+
+        self._send_callback(data_to_send)
+
+        # Reset lap completion flag after sending
+        if self.lap_just_completed:
+            self.lap_just_completed = False
 
     def _handle_car_telemetry(self, header: PacketHeader, payload: bytes):
         """Process car telemetry packet"""

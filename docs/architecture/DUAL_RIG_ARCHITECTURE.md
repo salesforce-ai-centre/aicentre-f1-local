@@ -688,7 +688,6 @@ class DataCloudUploader:
     <div class="dashboard-container">
         <!-- Header -->
         <header class="dashboard-header">
-            <h1>🏎️ Dual-Rig F1 25 Telemetry</h1>
             <div class="connection-status">
                 <span class="status-indicator" id="connectionStatus"></span>
                 <span id="connectionText">Connecting...</span>

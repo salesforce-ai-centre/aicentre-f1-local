@@ -1195,7 +1195,7 @@ class TelemetryBridge:
             "rigNumber": self.rig_number,
             # Validate lap number (should be reasonable, 1-200 for any F1 session)
             "lapNumber": self.current_lap_num if 1 <= self.current_lap_num <= 200 else 1,
-            
+
             "lapTimeSoFar": current_lap_time_seconds,
             "lastLapTime": final_lap_time_sec,
             "lapCompleted": is_lap_complete,
@@ -1203,6 +1203,13 @@ class TelemetryBridge:
             "sector": (current_lap.m_sector + 1) if current_lap.m_sector in [0, 1, 2] else 1,
             # Validate position (should be 1-22 for F1)
             "position": current_lap.m_carPosition if 1 <= current_lap.m_carPosition <= 22 else 1,
+
+            # Add fields expected by frontend (dual-rig-dashboard.js)
+            "currentLapNum": self.current_lap_num if 1 <= self.current_lap_num <= 200 else 1,
+            "currentLapTimeInMS": current_lap_time_ms,
+            "lastLapTimeInMS": last_lap_time_ms if last_lap_time_ms else 0,
+            "lapDistance": current_lap.m_lapDistance,
+            "currentLapInvalid": current_lap.m_currentLapInvalid,
             "speed": {
                 "current": current_telemetry.m_speed,
                 "average": lap_stats.get("speed", {}).get("average"),

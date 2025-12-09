@@ -15,12 +15,18 @@ from config import DEFAULT_SERVER_PORT, DEFAULT_SERVER_HOST
 # Load environment variables
 load_dotenv()
 
-# Configure logging
+# Configure logging - write to both file and console
+log_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'telemetry.log')
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='w'),  # Write to file (overwrite on restart)
+        logging.StreamHandler()  # Also write to console
+    ]
 )
 logger = logging.getLogger(__name__)
+logger.info(f"📝 Logging to file: {log_file}")
 
 # Get the parent directory of src/ which contains templates and static folders
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,6 +83,12 @@ gateway = TelemetryGateway(
 def index():
     """Serve dual-rig dashboard"""
     return render_template('dual_rig_dashboard.html', rigs=rigs)
+
+
+@app.route('/playback')
+def playback():
+    """Serve packet playback analyzer page"""
+    return render_template('packet_playback.html')
 
 
 @app.route('/health')

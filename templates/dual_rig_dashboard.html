@@ -12,17 +12,13 @@
         <!-- Header -->
         <header class="dashboard-header">
             <div class="header-left">
-                <img src="/static/assets/SF_F1_logo.jpeg" alt="Salesforce F1 Partnership" class="brand-logo">
-                <h1>Dual-Rig F1 25 Telemetry</h1>
+                <img src="/static/assets/SF_F1_logo.png" alt="Salesforce F1 Partnership" class="brand-logo">
             </div>
             <div class="header-right">
                 <div class="datacloud-status">
                     <span class="datacloud-indicator"></span>
                     <span class="datacloud-text">
-                        <svg width="16" height="16" viewBox="0 0 16 16" class="datacloud-icon">
-                            <path fill="currentColor" d="M13.5 7c-.276 0-.5.224-.5.5s.224.5.5.5.5-.224.5-.5-.224-.5-.5-.5zm-11 0c-.276 0-.5.224-.5.5s.224.5.5.5.5-.224.5-.5-.224-.5-.5-.5zm5.5-5c-2.757 0-5 2.243-5 5s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 9c-2.206 0-4-1.794-4-4s1.794-4 4-4 4 1.794 4 4-1.794 4-4 4z"/>
-                        </svg>
-                        Streaming to Data Cloud
+                        Streaming to Data 360
                     </span>
                 </div>
                 <div class="connection-status">
@@ -32,12 +28,36 @@
             </div>
         </header>
 
-        <!-- Main Content: Two Column Layout -->
+        <!-- Player Name Modal -->
+        <div id="playerNameModal" class="modal">
+            <div class="modal-content">
+                <h3>Save Session</h3>
+                <p>Enter player names for the completed session:</p>
+                <div class="player-inputs">
+                    <div class="player-input-group">
+                        <label for="rigA-playerName">🔴 Simulator 1</label>
+                        <input type="text" id="rigA-playerName" placeholder="Player name" maxlength="20">
+                        <div class="player-best-time">Best: <span id="rigA-modalBestTime">--:--.---</span></div>
+                    </div>
+                    <div class="player-input-group">
+                        <label for="rigB-playerName">🔵 Simulator 2</label>
+                        <input type="text" id="rigB-playerName" placeholder="Player name" maxlength="20">
+                        <div class="player-best-time">Best: <span id="rigB-modalBestTime">--:--.---</span></div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn btn-primary" id="confirmSaveBtn">Save</button>
+                    <button class="btn btn-secondary" id="cancelSaveBtn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content: Three Column Layout -->
         <div class="split-view">
             <!-- LEFT: Sim Rig 1 Panel -->
             <div class="rig-panel" id="rigAPanel">
                 <div class="rig-header rig-a-header">
-                    <h2>🔴 Sim Rig 1</h2>
+                    <h2>Simulator 1</h2>
                     <div class="rig-status" id="rigAStatus">Waiting for data...</div>
                     <div class="driver-name" id="rigADriver">{{ rigs[0].driver_name }}</div>
                     <div class="session-details">
@@ -176,12 +196,12 @@
                     </div>
 
                     <!-- Position & Lap -->
-                    <div class="metric-card position-card">
+                    <div class="metric-card position-card" style="display: none">
                         <h3>Position</h3>
                         <div class="metric-value position" id="rigA-position">--</div>
                     </div>
 
-                    <div class="metric-card laptime-card">
+                    <div class="metric-card laptime-card" style="display: none">
                         <h3>Current Lap</h3>
                         <div class="lap-info">
                             <div class="lap-number">Lap <span id="rigA-lapNum">--</span></div>
@@ -189,7 +209,7 @@
                         </div>
                     </div>
 
-                    <div class="metric-card lastlap-card">
+                    <div class="metric-card lastlap-card" style="display: none">
                         <h3>Last Lap</h3>
                         <div class="metric-value lap-time" id="rigA-lastLap">--:--.---</div>
                     </div>
@@ -261,10 +281,152 @@
                 </div>
             </div>
 
+            <!-- CENTER: Leaderboard Column -->
+            <div class="leaderboard-column">
+                <div class="leaderboard-column-header">
+                    <h2 id="centerColumnTitle">Leaderboard</h2>
+                    <div class="leaderboard-column-controls">
+                        <button class="btn-small btn-map-toggle" id="mapToggleBtn" title="Toggle track map">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                                <line x1="9" y1="3" x2="9" y2="18"/>
+                                <line x1="15" y1="6" x2="15" y2="21"/>
+                            </svg>
+                            Map
+                        </button>
+                        <button class="btn-small btn-view-toggle" id="viewToggleBtn" title="Toggle view">Combined</button>
+                    </div>
+                </div>
+
+                <!-- Combined View -->
+                <div class="leaderboard-view combined-view" id="combinedLeaderboard">
+                    <div class="session-best-overall">
+                        <div class="session-best-label">Overall Session Best</div>
+                        <div class="session-best-player" id="overallSessionBestPlayer">--</div>
+                        <div class="session-best-info">
+                            <div class="session-best-time-large" id="overallSessionBest">--:--.---</div>
+                            <div class="session-best-details">
+                                <span class="session-best-rig-badge" id="overallSessionBestRig"></span>
+                                <span class="session-best-lap-info" id="overallSessionBestLap">Lap --</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="leaderboard-controls-icons">
+                        <button class="btn-icon btn-save-icon" id="saveSessionBtn" title="Save Session">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-reset-icon" id="resetCurrentBtn" title="Reset Current Session">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="1 4 1 10 7 10"/>
+                                <polyline points="23 20 23 14 17 14"/>
+                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="leaderboard-entries" id="combinedLeaderboardEntries">
+                        <div class="no-data">No saved laps</div>
+                    </div>
+                </div>
+
+                <!-- Split View -->
+                <div class="leaderboard-view split-view-container" id="splitLeaderboard" style="display: none;">
+                    <div class="leaderboard-controls-icons">
+                        <button class="btn-icon btn-save-icon" id="saveSessionBtnSplit" title="Save Session">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-reset-icon" id="resetCurrentBtnSplit" title="Reset Current Session">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="1 4 1 10 7 10"/>
+                                <polyline points="23 20 23 14 17 14"/>
+                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="split-leaderboards">
+                        <div class="leaderboard-rig">
+                            <h3>🔴 Simulator 1</h3>
+                            <div class="session-best-compact">
+                                <div class="session-best-label">Session Best</div>
+                                <div class="session-best-time-compact" id="rigA-sessionBestSplit">--:--.---</div>
+                                <div class="session-best-lap-compact" id="rigA-sessionBestLapSplit">Lap --</div>
+                            </div>
+                            <div class="leaderboard-entries-compact" id="rigA-leaderboardEntries">
+                                <div class="no-data-compact">No saved laps</div>
+                            </div>
+                        </div>
+                        <div class="leaderboard-rig">
+                            <h3>🔵 Simulator 2</h3>
+                            <div class="session-best-compact">
+                                <div class="session-best-label">Session Best</div>
+                                <div class="session-best-time-compact" id="rigB-sessionBestSplit">--:--.---</div>
+                                <div class="session-best-lap-compact" id="rigB-sessionBestLapSplit">Lap --</div>
+                            </div>
+                            <div class="leaderboard-entries-compact" id="rigB-leaderboardEntries">
+                                <div class="no-data-compact">No saved laps</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Track Map View -->
+                <div class="track-map-view" id="trackMapView" style="display: none;">
+                    <div class="track-map-container">
+                        <div class="track-map-header">
+                            <h3 id="trackMapName">Silverstone Circuit</h3>
+                            <div class="track-map-legend">
+                                <div class="legend-item">
+                                    <span class="legend-dot rig-a-dot"></span>
+                                    <span>Simulator 1</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot rig-b-dot"></span>
+                                    <span>Simulator 2</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SVG Track Map Container -->
+                        <div class="track-svg-container">
+                            <svg id="trackMapSvg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
+                                <!-- Track will be loaded dynamically via JavaScript -->
+
+                                <!-- Car position markers (will be updated via JS) -->
+                                <circle id="rigAMarker" cx="400" cy="300" r="14" fill="#ef4444" stroke="#fff" stroke-width="3" style="display: none;"/>
+                                <circle id="rigBMarker" cx="400" cy="300" r="14" fill="#3b82f6" stroke="#fff" stroke-width="3" style="display: none;"/>
+                            </svg>
+                        </div>
+
+                        <!-- Track info footer -->
+                        <div class="track-map-info">
+                            <div class="track-info-item">
+                                <span class="track-info-label">Length:</span>
+                                <span class="track-info-value">5.891 km</span>
+                            </div>
+                            <div class="track-info-item">
+                                <span class="track-info-label">Turns:</span>
+                                <span class="track-info-value">18</span>
+                            </div>
+                            <div class="track-info-item">
+                                <span class="track-info-label">DRS Zones:</span>
+                                <span class="track-info-value">2</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- RIGHT: Sim Rig 2 Panel -->
             <div class="rig-panel" id="rigBPanel">
                 <div class="rig-header rig-b-header">
-                    <h2>🔵 Sim Rig 2</h2>
+                    <h2>🔵 Simulator 2</h2>
                     <div class="rig-status" id="rigBStatus">Waiting for data...</div>
                     <div class="driver-name" id="rigBDriver">{{ rigs[1].driver_name }}</div>
                     <div class="session-details">
@@ -403,12 +565,12 @@
                     </div>
 
                     <!-- Position & Lap -->
-                    <div class="metric-card position-card">
+                    <div class="metric-card position-card" style="display: none">
                         <h3>Position</h3>
                         <div class="metric-value position" id="rigB-position">--</div>
                     </div>
 
-                    <div class="metric-card laptime-card">
+                    <div class="metric-card laptime-card" style="display: none">
                         <h3>Current Lap</h3>
                         <div class="lap-info">
                             <div class="lap-number">Lap <span id="rigB-lapNum">--</span></div>
@@ -416,7 +578,7 @@
                         </div>
                     </div>
 
-                    <div class="metric-card lastlap-card">
+                    <div class="metric-card lastlap-card" style="display: none">
                         <h3>Last Lap</h3>
                         <div class="metric-value lap-time" id="rigB-lastLap">--:--.---</div>
                     </div>
